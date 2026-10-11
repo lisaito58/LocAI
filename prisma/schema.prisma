@@ -1,4 +1,6 @@
-// データベースの表の定義（モデルは設計後に追加する）
+// データベースの表の定義
+// 時刻はすべてUTCで保存し、表示時に日本時間へ変換する。
+// 数量はg整数、金額は円整数、単価は円/kgで保存する。
 
 generator client {
   provider = "prisma-client"
@@ -7,4 +9,517 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ============================================================
+// 認証（Better Auth）
+// Better Auth の導入時に公式CLIの生成結果と照合して調整する。
+// ============================================================
+
+// 初期版の購入者は飲食店のみ。一般消費者のロールは作らない。
+enum Role {
+  RESTAURANT
+  FARMER
+}
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  role          Role
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  sessions          Session[]
+  accounts          Account[]
+  restaurantProfile RestaurantProfile?
+  farmerProfile     FarmerProfile?
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @db.Timestamptz(3)
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ============================================================
+// プロフィール
+// 市区町村までは公開、詳細住所・連絡先は販売確定後に取引相手だけへ開示する。
+// ============================================================
+
+model RestaurantProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  shopName         String
+  prefecture       String
+  city             String
+  addressLine      String // 詳細住所（非公開）
+  contactPhone     String // 連絡先（非公開）
+  defaultBudgetYen Int?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders    Order[]
+  inquiries ListingInquiry[]
+}
+
+model FarmerProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  farmName          String
+  prefecture        String
+  city              String
+  addressLine       String // 詳細住所（非公開）
+  contactPhone      String // 連絡先（非公開）
+  introduction      String? // 公開する紹介文（AI下書きは本人確認後に保存）
+  responseGuide     String? // プロフィールの回答目安（注文の入金確認目安とは別）
+  availableWeekdays String? // 対応曜日（参考表示のみ。営業日計算はしない）
+  photoUrl          String? // プロフィール写真（任意）
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings  Listing[]
+  orders    Order[]
+  costMemos CostMemo[]
+}
+
+// ============================================================
+// 出品
+// 申込可能数量 = totalGrams - soldGrams - heldGrams
+// soldGrams + heldGrams <= totalGrams はマイグレーションでCHECK制約として追加する。
+// ============================================================
+
+enum ListingStatus {
+  DRAFT // 下書き
+  PUBLISHED // 公開中
+  CLOSED // 受付終了（再公開できる）
+}
+
+model Listing {
+  id                   String        @id @default(cuid())
+  farmerId             String
+  status               ListingStatus @default(DRAFT)
+  itemName             String
+  description          String? // 公開する説明
+  selfDeclaredFeatures String? // 自己申告の特徴（その旨を表示する）
+  unitPriceYenPerKg    Int
+  totalGrams           Int // 出品総量（アプリ用在庫）
+  soldGrams            Int           @default(0) // 販売確定量
+  heldGrams            Int           @default(0) // 有効な仮押さえ量
+  minOrderGrams        Int // 最低量
+  orderStepGrams       Int // 注文単位
+  responseGraceMinutes Int // 回答猶予
+  acceptDeadlineAt     DateTime      @db.Timestamptz(3) // 受付期限（新規申込だけを止める）
+  responseDeadlineAt   DateTime      @db.Timestamptz(3) // 回答最終期限
+  publishRound         Int           @default(1) // 再公開の回数（同一IDで再公開する）
+  copiedFromListingId  String? // 出品複製の元（在庫は引き継がない）
+  publishedAt          DateTime?     @db.Timestamptz(3)
+  createdAt            DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(3)
+
+  farmer          FarmerProfile    @relation(fields: [farmerId], references: [id])
+  photos          ListingPhoto[]
+  deliveryOptions DeliveryOption[]
+  scheduleSlots   ScheduleSlot[]
+  orders          Order[]
+  inquiries       ListingInquiry[]
+
+  @@index([status, acceptDeadlineAt])
+  @@index([farmerId])
+}
+
+// 実物写真。再公開時は撮り直した写真を publishRound ごとに登録する。
+model ListingPhoto {
+  id                 String   @id @default(cuid())
+  listingId          String
+  publishRound       Int
+  url                String
+  storageKey         String
+  takenOn            DateTime @db.Date // 撮影日
+  selfTakenConfirmed Boolean // 本人撮影の確認
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, publishRound])
+}
+
+// ============================================================
+// 受け渡し条件・送料表・支払条件・日程枠
+// ============================================================
+
+enum DeliveryMethod {
+  SHIPPING // 配送（配送会社の手配はしない）
+  HAND_DELIVERY // 農家が持参
+  PICKUP // 店が引き取り
+}
+
+enum PaymentTiming {
+  PREPAID // 前払い
+  ON_HANDOVER // 受け渡し時払い
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER // 銀行振込（銀行連携はしない）
+  CASH // 現金
+  CREDIT_CARD // クレジットカード（アプリ外で支払い、手動記録のみ）
+  PAYPAY // PayPay（アプリ外で支払い、手動記録のみ）
+}
+
+// 出品ごとの受け渡し条件と、その条件の支払方法・期限
+model DeliveryOption {
+  id                       String         @id @default(cuid())
+  listingId                String
+  method                   DeliveryMethod
+  paymentTiming            PaymentTiming
+  paymentMethod            PaymentMethod
+  prepayDeadlineAt         DateTime?      @db.Timestamptz(3) // 前払い期限（回答最終期限より後、受け渡し前）
+  paymentConfirmGuideHours Int // 農家の入金確認目安
+  createdAt                DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime       @updatedAt @db.Timestamptz(3)
+
+  listing       Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  shippingRates ShippingRate[]
+  scheduleSlots ScheduleSlot[]
+
+  @@index([listingId])
+}
+
+// 送料表（地域×数量帯）。帯は「下限超・上限以下」。穴・重複はアプリで登録エラーにする。
+// 無料・引き取りも 0 円として明示的に登録する。
+model ShippingRate {
+  id                String @id @default(cuid())
+  deliveryOptionId  String
+  prefecture        String // 地域（都道府県）
+  minGramsExclusive Int // 下限（この値を含まない）
+  maxGramsInclusive Int // 上限（この値を含む）
+  feeYen            Int
+
+  deliveryOption DeliveryOption @relation(fields: [deliveryOptionId], references: [id], onDelete: Cascade)
+
+  @@unique([deliveryOptionId, prefecture, minGramsExclusive])
+  @@index([deliveryOptionId, prefecture])
+}
+
+// 受け渡し日程の枠。capacity は任意の件数制限。
+// usedCount は回答待ち・条件変更待ち・販売確定の注文が使う件数。
+model ScheduleSlot {
+  id               String    @id @default(cuid())
+  listingId        String
+  deliveryOptionId String
+  startsAt         DateTime  @db.Timestamptz(3)
+  endsAt           DateTime? @db.Timestamptz(3)
+  capacity         Int?
+  usedCount        Int       @default(0)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+
+  listing        Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  deliveryOption DeliveryOption @relation(fields: [deliveryOptionId], references: [id], onDelete: Cascade)
+  orders         Order[]
+
+  @@index([listingId, startsAt])
+}
+
+// ============================================================
+// 注文
+// 仮押さえが存在するのは AWAITING_RESPONSE と AWAITING_REAGREEMENT だけ。
+// CONFIRMED / DECLINED / CANCELLED / EXPIRED は終端状態で、戻さない。
+// ============================================================
+
+enum OrderStatus {
+  AWAITING_RESPONSE // 回答待ち
+  AWAITING_REAGREEMENT // 条件変更の確認待ち
+  CONFIRMED // 販売確定
+  DECLINED // 見送り
+  CANCELLED // 取消
+  EXPIRED // 期限切れ
+}
+
+model Order {
+  id                  String      @id @default(cuid())
+  listingId           String
+  restaurantId        String
+  farmerId            String
+  status              OrderStatus @default(AWAITING_RESPONSE)
+  idempotencyKey      String // 連打・再試行による重複申込を防ぐ
+  quantityGrams       Int
+  heldGrams           Int // この注文が仮押さえ中の量（終端状態では 0）
+  deadlineAt          DateTime    @db.Timestamptz(3) // 注文期限（申込時刻＋回答猶予・仕入れ確定希望・回答最終期限の最小値）
+  purchaseConfirmByAt DateTime    @db.Timestamptz(3) // 店の仕入れ確定希望時刻
+  useDate             DateTime    @db.Date // 使用日
+  budgetYen           Int? // 店の予算（超過時の警告用）
+  scheduleSlotId      String
+
+  // --- 申込時のスナップショット（出品の変更・再公開で上書きしない） ---
+  snapItemName                 String
+  snapUnitPriceYenPerKg        Int
+  snapMinOrderGrams            Int
+  snapOrderStepGrams           Int
+  snapDeliveryMethod           DeliveryMethod
+  snapPrefecture               String // 送料計算に使った地域
+  snapShippingRates            Json // 申込時の送料表
+  snapScheduleStartsAt         DateTime       @db.Timestamptz(3)
+  snapScheduleEndsAt           DateTime?      @db.Timestamptz(3)
+  snapPaymentTiming            PaymentTiming
+  snapPaymentMethod            PaymentMethod
+  snapPaymentDeadlineAt        DateTime       @db.Timestamptz(3) // 前払い期限、または受け渡し日時
+  snapPaymentConfirmGuideHours Int // 農家の入金確認目安
+
+  // --- 金額（サーバーで再計算した値） ---
+  itemSubtotalYen Int // 単価×数量÷1000 を商品代全体で切り捨て
+  shippingFeeYen  Int
+  totalYen        Int
+
+  // --- 確定後の補助情報（注文状態とは別項目） ---
+  needsDiscussion   Boolean   @default(false) // 要相談フラグ（当事者が付ける）
+  needsDiscussionBy String?
+  needsDiscussionAt DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  decidedAt DateTime? @db.Timestamptz(3) // 終端状態になった時刻
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  listing         Listing              @relation(fields: [listingId], references: [id])
+  restaurant      RestaurantProfile    @relation(fields: [restaurantId], references: [id])
+  farmer          FarmerProfile        @relation(fields: [farmerId], references: [id])
+  scheduleSlot    ScheduleSlot         @relation(fields: [scheduleSlotId], references: [id])
+  changeProposal  OrderChangeProposal?
+  events          OrderEvent[]
+  messages        OrderMessage[]
+  payment         PaymentRecord?
+  fulfillment     FulfillmentRecord?
+  corrections     RecordCorrection[]
+  costMemos       CostMemo[]
+  backupInquiries ListingInquiry[]     @relation("PrimaryOrder")
+  fromInquiry     ListingInquiry?      @relation("ConvertedOrder")
+
+  @@unique([restaurantId, idempotencyKey])
+  @@index([listingId, status])
+  @@index([restaurantId, status])
+  @@index([farmerId, status])
+  @@index([status, deadlineAt])
+}
+
+// 農家の条件変更案（1注文につき1回だけ）。単価・食材・数量増加は変更できない。
+model OrderChangeProposal {
+  id                 String    @id @default(cuid())
+  orderId            String    @unique
+  newQuantityGrams   Int
+  newScheduleSlotId  String
+  newShippingFeeYen  Int
+  exceptionFeeReason String? // 例外送料の理由
+  newItemSubtotalYen Int
+  newTotalYen        Int
+  warnings           Json // 店の希望を満たさない点（日時・予算超過など）
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  respondedAt        DateTime? @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+// 注文状態の変更履歴
+model OrderEvent {
+  id         String       @id @default(cuid())
+  orderId    String
+  actorId    String? // 期限切れなどシステム処理は null
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  note       String?
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+// ============================================================
+// 相談（注文スレッドと出品スレッドを分ける。テキスト500文字以内、画像添付なし）
+// ============================================================
+
+model OrderMessage {
+  id        String   @id @default(cuid())
+  orderId   String
+  senderId  String
+  body      String   @db.VarChar(500)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+enum InquiryStatus {
+  OPEN // 相談中（仮押さえなし）
+  CONVERTED // 新規注文に進んだ
+  CLOSED // 終了
+}
+
+// 出品スレッド。予備相談・送料未設定の相談に使う。仮押さえ・注文状態は持たない。
+model ListingInquiry {
+  id               String        @id @default(cuid())
+  listingId        String
+  restaurantId     String
+  status           InquiryStatus @default(OPEN)
+  primaryOrderId   String? // 予備相談のときの第一候補の注文
+  convertedOrderId String?       @unique // 新規注文に進んだときの注文
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  listing        Listing           @relation(fields: [listingId], references: [id])
+  restaurant     RestaurantProfile @relation(fields: [restaurantId], references: [id])
+  primaryOrder   Order?            @relation("PrimaryOrder", fields: [primaryOrderId], references: [id])
+  convertedOrder Order?            @relation("ConvertedOrder", fields: [convertedOrderId], references: [id])
+  messages       InquiryMessage[]
+
+  @@index([listingId])
+  @@index([restaurantId])
+}
+
+model InquiryMessage {
+  id        String   @id @default(cuid())
+  inquiryId String
+  senderId  String
+  body      String   @db.VarChar(500)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  inquiry ListingInquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+
+  @@index([inquiryId, createdAt])
+}
+
+// ============================================================
+// 販売確定後の手動記録（決済・銀行・配送会社とは連携しない）
+// ============================================================
+
+enum PaymentRecordStatus {
+  AWAITING_PAYMENT // 支払い待ち
+  BUYER_REPORTED // 店の支払申告・確認待ち
+  FARMER_CONFIRMED // 農家の入金確認／代金受取
+}
+
+model PaymentRecord {
+  id              String              @id @default(cuid())
+  orderId         String              @unique
+  status          PaymentRecordStatus @default(AWAITING_PAYMENT)
+  firstReportedAt DateTime?           @db.Timestamptz(3) // 最初の支払申告（確認予定の起点。連打で延ばさない）
+  lastReportedAt  DateTime?           @db.Timestamptz(3)
+  confirmedAt     DateTime?           @db.Timestamptz(3)
+  confirmedBy     String?
+  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model FulfillmentRecord {
+  id              String    @id @default(cuid())
+  orderId         String    @unique
+  farmerSentAt    DateTime? @db.Timestamptz(3) // 農家の「発送済み／引き渡し済み」
+  farmerSentBy    String?
+  buyerReceivedAt DateTime? @db.Timestamptz(3) // 店の「受取済み」
+  buyerReceivedBy String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+// 記録の訂正履歴（操作主体・時刻・理由・変更前後）
+model RecordCorrection {
+  id         String   @id @default(cuid())
+  orderId    String
+  actorId    String
+  recordType String // "payment" / "fulfillment" など
+  before     Json
+  after      Json
+  reason     String
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+// ============================================================
+// 費用メモ（農家のみ閲覧・編集。店の請求額には影響しない）
+// 未入力は null のまま保存し、0円とみなさない。
+// ============================================================
+
+enum CostMemoKind {
+  ACTUAL // 実績（注文に紐付く）
+  SIMULATION // 値下げ検討などの試算
+}
+
+model CostMemo {
+  id                  String       @id @default(cuid())
+  farmerId            String
+  orderId             String?
+  kind                CostMemoKind
+  quantityGrams       Int? // 試算の仮の量
+  itemSubtotalYen     Int? // 試算の仮の商品代
+  receivedShippingYen Int? // 受け取る送料
+  actualShippingYen   Int? // 配送実費
+  packingYen          Int? // 梱包費
+  otherSalesCostYen   Int? // その他販売費用
+  marketItemName      String? // 市場比較：本人が入力した品目
+  marketGrams         Int? // 市場比較：本人が入力した量
+  marketAmountYen     Int? // 市場比較：本人が入力した額
+  note                String?
+  createdAt           DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime     @updatedAt @db.Timestamptz(3)
+
+  farmer FarmerProfile @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  order  Order?        @relation(fields: [orderId], references: [id])
+
+  @@index([farmerId, createdAt])
+  @@index([orderId])
 }
