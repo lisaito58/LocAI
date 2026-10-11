@@ -44,3 +44,6 @@ next-env.d.ts
 
 # prisma（prisma generate で作られるファイル）
 /src/generated/prisma
+
+# Next.js のテレメトリ設定など（手元専用）
+/cache
