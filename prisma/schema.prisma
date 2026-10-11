@@ -1,0 +1,10 @@
+// データベースの表の定義（モデルは設計後に追加する）
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
