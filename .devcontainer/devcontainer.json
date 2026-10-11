@@ -1,0 +1,27 @@
+{
+  // LocAI の開発用コンテナ（Node.js と git が入った箱）
+  "name": "LocAI",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+
+  // アプリを動かしたときに、パソコンのブラウザから http://localhost:3000 で見られるようにする
+  "forwardPorts": [3000],
+
+  // node_modules と .next はコンテナ内の保存場所に置く
+  // （OneDrive の同期対象にしないため。ファイル数が多く、動作も遅くなるため）
+  "mounts": [
+    "source=locai-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    "source=locai-next,target=${containerWorkspaceFolder}/.next,type=volume"
+  ],
+  "postCreateCommand": "sudo chown node node_modules .next",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "dbaeumer.vscode-eslint",
+        "Prisma.prisma"
+      ]
+    }
+  },
+  "remoteUser": "node"
+}
