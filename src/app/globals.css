@@ -1,26 +1,104 @@
 @import "tailwindcss";
 
+/* 野菜っぽい緑と白のテーマ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fbfdf8;
+  --foreground: #1f3a2a;
+  --leaf: #2f7d4f;
+  --leaf-dark: #1f5c39;
+  --leaf-light: #e8f5e9;
+  --sprout: #8bc34a;
+  --soil: #8d6e63;
+  --tomato: #e4572e;
+  --corn: #f6c445;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-leaf: var(--leaf);
+  --color-leaf-dark: var(--leaf-dark);
+  --color-leaf-light: var(--leaf-light);
+  --color-sprout: var(--sprout);
+  --color-soil: var(--soil);
+  --color-tomato: var(--tomato);
+  --color-corn: var(--corn);
+  --font-sans: var(--font-maru), "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
+  /* うっすら葉っぱの水玉模様 */
+  background-image:
+    radial-gradient(circle at 1px 1px, rgb(47 125 79 / 0.07) 1px, transparent 0),
+    linear-gradient(180deg, #f1f8ee 0%, var(--background) 320px);
+  background-size: 22px 22px, 100% 100%;
+  background-repeat: repeat, no-repeat;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* 共通の部品クラス（@apply で組み合わせられるよう @utility で定義） */
+@utility card {
+  @apply rounded-3xl border border-green-100 bg-white p-5 shadow-[0_2px_0_rgb(47_125_79/0.06),0_8px_24px_-12px_rgb(31_92_57/0.25)];
+}
+
+@utility card-soft {
+  @apply rounded-3xl border border-green-100 bg-leaf-light/60 p-5;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply btn bg-leaf text-white shadow-[0_3px_0_var(--leaf-dark)] hover:bg-leaf-dark;
+}
+
+@utility btn-secondary {
+  @apply btn border-2 border-leaf bg-white text-leaf-dark hover:bg-leaf-light;
+}
+
+@utility btn-danger {
+  @apply btn border-2 border-red-300 bg-white text-red-700 hover:bg-red-50;
+}
+
+@utility btn-sm {
+  @apply px-3.5 py-1.5 text-sm;
+}
+
+@utility input {
+  @apply w-full rounded-2xl border-2 border-green-100 bg-white px-3.5 py-2.5 outline-none transition focus:border-leaf focus:ring-4 focus:ring-green-100;
+}
+
+@utility label {
+  @apply text-sm font-bold text-leaf-dark;
+}
+
+@utility hint {
+  @apply text-xs text-green-900/60;
+}
+
+@utility badge {
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold;
+}
+
+@utility link {
+  @apply font-bold text-leaf underline decoration-sprout decoration-2 underline-offset-4 hover:text-leaf-dark;
+}
+
+@utility section-title {
+  @apply flex items-center gap-2 text-lg font-bold text-leaf-dark;
+}
+
+/* ヒーローの野菜がふわふわ浮く */
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-10px) rotate(4deg); }
+}
+.float {
+  animation: float 5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .float { animation: none; }
 }

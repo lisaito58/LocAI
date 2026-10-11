@@ -3,8 +3,10 @@
 // 数量はg整数、金額は円整数、単価は円/kgで保存する。
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  // include した関連データを1回のSQLで読む（DBとの往復を減らす）
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -112,19 +114,22 @@ model RestaurantProfile {
 }
 
 model FarmerProfile {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  farmName          String
-  prefecture        String
-  city              String
-  addressLine       String // 詳細住所（非公開）
-  contactPhone      String // 連絡先（非公開）
-  introduction      String? // 公開する紹介文（AI下書きは本人確認後に保存）
-  responseGuide     String? // プロフィールの回答目安（注文の入金確認目安とは別）
-  availableWeekdays String? // 対応曜日（参考表示のみ。営業日計算はしない）
-  photoUrl          String? // プロフィール写真（任意）
-  createdAt         DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+  id                       String   @id @default(cuid())
+  userId                   String   @unique
+  farmName                 String
+  prefecture               String
+  city                     String
+  addressLine              String // 詳細住所（非公開）
+  contactPhone             String // 連絡先（非公開）
+  introduction             String? // 公開する紹介文（AI下書きは本人確認後に保存）
+  responseGuide            String? // プロフィールの回答目安（注文の入金確認目安とは別）
+  availableWeekdays        String? // 対応曜日（参考表示のみ。営業日計算はしない）
+  photoUrl                 String? // プロフィール写真（任意）
+  mainItems                String? // 主な品目（公開）
+  commitment               String? // 栽培のこだわり（公開・自己申告）
+  paymentConfirmGuideHours Int? // 入金確認目安（出品の受け渡し条件の初期値。注文には申込時の値を保存）
+  createdAt                DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime @updatedAt @db.Timestamptz(3)
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   listings  Listing[]
@@ -151,6 +156,8 @@ model Listing {
   itemName             String
   description          String? // 公開する説明
   selfDeclaredFeatures String? // 自己申告の特徴（その旨を表示する）
+  sizeLabel            String? // 大きさ（小さめ／中くらい／大きめ／混在）
+  conditionNote        String? // 形・傷などの状態と補足
   unitPriceYenPerKg    Int
   totalGrams           Int // 出品総量（アプリ用在庫）
   soldGrams            Int           @default(0) // 販売確定量
@@ -188,9 +195,21 @@ model ListingPhoto {
   selfTakenConfirmed Boolean // 本人撮影の確認
   createdAt          DateTime @default(now()) @db.Timestamptz(3)
 
-  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing Listing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  blob    PhotoBlob?
 
   @@index([listingId, publishRound])
+}
+
+// 写真の画像データ。Vercel はローカルディスクに永続保存できないため、DB に保存する。
+// 一覧の読み込みで画像本体を毎回読まないよう、ListingPhoto と表を分ける。
+model PhotoBlob {
+  id          String @id @default(cuid())
+  photoId     String @unique
+  contentType String
+  data        Bytes
+
+  photo ListingPhoto @relation(fields: [photoId], references: [id], onDelete: Cascade)
 }
 
 // ============================================================
@@ -224,6 +243,7 @@ model DeliveryOption {
   paymentMethod            PaymentMethod
   prepayDeadlineAt         DateTime?      @db.Timestamptz(3) // 前払い期限（回答最終期限より後、受け渡し前）
   paymentConfirmGuideHours Int // 農家の入金確認目安
+  active                   Boolean        @default(true) // 再公開で新しい条件に切り替えたら false（既存注文の参照は残す）
   createdAt                DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt                DateTime       @updatedAt @db.Timestamptz(3)
 
@@ -298,6 +318,7 @@ model Order {
   useDate             DateTime    @db.Date // 使用日
   budgetYen           Int? // 店の予算（超過時の警告用）
   scheduleSlotId      String
+  hasConsultation     Boolean     @default(false) // 申込時に相談文を添えたか（「相談あり」として全件承認から外す）
 
   // --- 申込時のスナップショット（出品の変更・再公開で上書きしない） ---
   snapItemName                 String
@@ -522,4 +543,11 @@ model CostMemo {
 
   @@index([farmerId, createdAt])
   @@index([orderId])
+}
+
+// 連続操作の制限（短時間に同じ操作を繰り返させない）
+model RateLimit {
+  key         String   @id
+  windowStart DateTime @db.Timestamptz(3)
+  count       Int
 }

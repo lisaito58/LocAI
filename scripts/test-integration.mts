@@ -1,0 +1,395 @@
+// 注文・在庫ルールの結合テスト（実際のDBで、架空のテスト用データだけを使う）
+// 実行：npm run test:integration
+// このテストが作ったデータ（メールが it-<実行ID>-...@example.invalid）だけを、最後に削除する。
+import "./load-env";
+import assert from "node:assert/strict";
+import { closeListing, createListing, republishListing, updateListing } from "../src/lib/domain/listings";
+import * as orders from "../src/lib/domain/orders";
+import * as records from "../src/lib/domain/records";
+import { searchListings } from "../src/lib/domain/search";
+import { dbNow } from "../src/lib/domain/tx";
+import { dateToJstDateText, dateToJstLocal } from "../src/lib/domain/units";
+import type { ListingInput } from "../src/lib/validation/listing";
+import { prisma } from "../src/lib/prisma";
+
+const RUN = `it-${Date.now().toString(36)}`;
+let passed = 0;
+let failed = 0;
+async function check(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
+    passed++;
+    console.log(`✅ ${name}`);
+  } catch (e) {
+    failed++;
+    console.log(`❌ ${name}\n   ${e instanceof Error ? e.message : e}`);
+  }
+}
+
+// ---- テスト用の架空データ ----
+async function makeUser(role: "FARMER" | "RESTAURANT", key: string, prefecture: string) {
+  const id = `${RUN}-${key}`;
+  await prisma.user.create({ data: { id, name: `テスト${key}`, email: `${id}@example.invalid`, role } });
+  if (role === "FARMER") {
+    await prisma.farmerProfile.create({
+      data: { userId: id, farmName: `テスト農園${key}`, prefecture, city: "南丹市", addressLine: "架空1-1", contactPhone: "000-0000-0000" },
+    });
+  } else {
+    await prisma.restaurantProfile.create({
+      data: { userId: id, shopName: `テスト食堂${key}`, prefecture, city: "大阪市", addressLine: "架空2-2", contactPhone: "000-0000-0000" },
+    });
+  }
+  return id;
+}
+
+const now0 = await dbNow(prisma);
+const at = (hours: number) => dateToJstLocal(new Date(now0.getTime() + hours * 3_600_000));
+const useDate = dateToJstDateText(new Date(now0.getTime() + 5 * 86_400_000));
+const confirmBy = new Date(now0.getTime() + 40 * 3_600_000);
+const PHOTO = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0]), contentType: "image/jpeg" };
+
+function listingInput(o: { totalKg: number; minKg: number; stepKg: number; price: number; method?: "SHIPPING" | "PICKUP"; capacity?: number }): ListingInput {
+  const method = o.method ?? "SHIPPING";
+  return {
+    itemName: "テスト茄子",
+    description: undefined,
+    selfDeclaredFeatures: undefined,
+    conditionNote: undefined,
+    unitPriceYenPerKg: o.price,
+    totalKg: o.totalKg,
+    minKg: o.minKg,
+    stepKg: o.stepKg,
+    responseGraceHours: 24,
+    acceptDeadlineAt: at(20),
+    responseDeadlineAt: at(48),
+    photoTakenOn: useDate,
+    photoSelfTaken: true as const,
+    sizeLabel: "" as const,
+    deliveryOptions: [
+      {
+        method,
+        paymentTiming: "PREPAID" as const,
+        paymentMethod: "BANK_TRANSFER" as const,
+        prepayDeadlineAt: at(60),
+        paymentConfirmGuideHours: 24,
+        rates:
+          method === "PICKUP"
+            ? [{ prefecture: "大阪府" as const, minKg: 0, maxKg: 1_000_000, feeYen: 0 }]
+            : [
+                { prefecture: "大阪府" as const, minKg: 0, maxKg: 2000, feeYen: 800 },
+                { prefecture: "大阪府" as const, minKg: 2000, maxKg: 5000, feeYen: 1000 },
+                { prefecture: "大阪府" as const, minKg: 5000, maxKg: 10000, feeYen: 1300 },
+              ],
+        slots: [
+          { startsAt: at(72), capacity: o.capacity ?? ("" as const) },
+          { startsAt: at(96), capacity: "" as const },
+        ],
+      },
+    ],
+  };
+}
+
+async function newListing(farmer: string, o: Parameters<typeof listingInput>[0]) {
+  const r = await createListing(prisma, { farmerUserId: farmer, data: listingInput(o), photo: PHOTO });
+  if (!r.ok) throw new Error(r.error);
+  return r.listingId;
+}
+
+async function order(restaurant: string, listingId: string, kg: number, extra: Partial<Parameters<typeof orders.createOrder>[1]> = {}) {
+  const opt = await prisma.deliveryOption.findFirstOrThrow({ where: { listingId, active: true }, include: { scheduleSlots: { orderBy: { startsAt: "asc" } } } });
+  return orders.createOrder(prisma, {
+    restaurantUserId: restaurant,
+    listingId,
+    deliveryOptionId: opt.id,
+    scheduleSlotId: opt.scheduleSlots[0].id,
+    quantityGrams: Math.round(kg * 1000),
+    budgetYen: 100_000,
+    useDate,
+    purchaseConfirmByAt: confirmBy,
+    idempotencyKey: crypto.randomUUID(),
+    ...extra,
+  });
+}
+
+function okId(r: Awaited<ReturnType<typeof order>>) {
+  if (!r.ok) throw new Error(r.error);
+  return r.orderId;
+}
+
+async function stock(listingId: string) {
+  const l = await prisma.listing.findUniqueOrThrow({ where: { id: listingId } });
+  return { total: l.totalGrams, sold: l.soldGrams, held: l.heldGrams, available: l.totalGrams - l.soldGrams - l.heldGrams };
+}
+
+// 不変条件：出品の確定量・仮押さえ量が、注文の合計と一致し、総量を超えない
+async function assertInvariant(listingId: string) {
+  const s = await stock(listingId);
+  const os = await prisma.order.findMany({ where: { listingId } });
+  const held = os.filter((o) => ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT"].includes(o.status)).reduce((a, o) => a + o.heldGrams, 0);
+  const sold = os.filter((o) => o.status === "CONFIRMED").reduce((a, o) => a + o.quantityGrams, 0);
+  assert.equal(s.held, held, `仮押さえ量が注文と一致しない（出品${s.held}g / 注文${held}g）`);
+  assert.equal(s.sold, sold, `確定量が注文と一致しない（出品${s.sold}g / 注文${sold}g）`);
+  assert.ok(s.sold + s.held <= s.total, "売り越し");
+  for (const o of os) if (!["AWAITING_RESPONSE", "AWAITING_REAGREEMENT"].includes(o.status)) assert.equal(o.heldGrams, 0);
+}
+
+try {
+  const F = await makeUser("FARMER", "f1", "京都府");
+  const F2 = await makeUser("FARMER", "f2", "京都府");
+  const R1 = await makeUser("RESTAURANT", "r1", "大阪府");
+  const R2 = await makeUser("RESTAURANT", "r2", "大阪府");
+  const R3 = await makeUser("RESTAURANT", "r3", "大阪府");
+  const RH = await makeUser("RESTAURANT", "rh", "兵庫県");
+
+  await check("1. 複数店舗が異なる数量で申し込み、全量未達でも注文ごとに承認できる", async () => {
+    const L = await newListing(F, { totalKg: 10000, minKg: 1000, stepKg: 500, price: 900 });
+    const o1 = okId(await order(R1, L, 2));
+    const o2 = okId(await order(R2, L, 3.5));
+    okId(await order(R3, L, 1));
+    assert.deepEqual(await stock(L), { total: 10000, sold: 0, held: 6500, available: 3500 });
+    assert.ok((await orders.approveOrder(prisma, { orderId: o1, farmerUserId: F })).ok);
+    assert.ok((await orders.approveOrder(prisma, { orderId: o2, farmerUserId: F })).ok);
+    assert.deepEqual(await stock(L), { total: 10000, sold: 5500, held: 1000, available: 3500 });
+    const a = await prisma.order.findUniqueOrThrow({ where: { id: o1 } });
+    assert.equal(a.totalYen, 1800 + 800); // 2kgちょうどは800円帯
+    const b = await prisma.order.findUniqueOrThrow({ where: { id: o2 } });
+    assert.equal(b.totalYen, 3150 + 1000);
+    await assertInvariant(L);
+  });
+
+  await check("2. 残り1kgへの同時申込で売り越さない／連打は1件にまとまる", async () => {
+    const L = await newListing(F, { totalKg: 1000, minKg: 1000, stepKg: 1000, price: 500 });
+    const rs = await Promise.all([order(R1, L, 1), order(R2, L, 1), order(R3, L, 1)]);
+    assert.equal(rs.filter((r) => r.ok).length, 1, "成功は1件だけのはず");
+    assert.deepEqual(await stock(L), { total: 1000, sold: 0, held: 1000, available: 0 });
+    await assertInvariant(L);
+
+    const L2 = await newListing(F, { totalKg: 5000, minKg: 1000, stepKg: 1000, price: 500 });
+    const key = crypto.randomUUID();
+    const dup = await Promise.all([1, 2, 3].map(() => order(R1, L2, 1, { idempotencyKey: key })));
+    assert.ok(dup.every((r) => r.ok));
+    const ids = new Set(dup.map((r) => (r.ok ? r.orderId : "")));
+    assert.equal(ids.size, 1, "同じキーの申込は1件の注文");
+    assert.equal(await prisma.order.count({ where: { listingId: L2 } }), 1);
+    assert.equal((await stock(L2)).held, 1000, "仮押さえも1件分だけ");
+  });
+
+  await check("3a. 取消と承認の競合：先に成功した操作だけが反映され、残量が一致する", async () => {
+    const L = await newListing(F, { totalKg: 5000, minKg: 1000, stepKg: 1000, price: 500 });
+    for (let i = 0; i < 3; i++) {
+      const o = okId(await order(R1, L, 1));
+      const [c, a] = await Promise.all([
+        orders.cancelOrder(prisma, { orderId: o, restaurantUserId: R1 }),
+        orders.approveOrder(prisma, { orderId: o, farmerUserId: F }),
+      ]);
+      assert.equal(Number(c.ok) + Number(a.ok), 1, "どちらか一方だけ成功");
+      const st = (await prisma.order.findUniqueOrThrow({ where: { id: o } })).status;
+      assert.equal(st, c.ok ? "CANCELLED" : "CONFIRMED");
+      if (!a.ok) assert.match(a.error, /取消/);
+    }
+    await assertInvariant(L);
+  });
+
+  await check("3b. 期限切れと承認の競合／期限ちょうどは期限切れ", async () => {
+    const L = await newListing(F, { totalKg: 5000, minKg: 1000, stepKg: 1000, price: 500 });
+    const o = okId(await order(R1, L, 1));
+    await prisma.$executeRaw`UPDATE "Order" SET "deadlineAt" = clock_timestamp() - interval '1 second' WHERE id = ${o}`;
+    const [a] = await Promise.all([
+      orders.approveOrder(prisma, { orderId: o, farmerUserId: F }),
+      orders.expireDueOrders(prisma, { listingIds: [L] }),
+    ]);
+    assert.ok(!a.ok, "期限後の承認は失敗");
+    assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: o } })).status, "EXPIRED");
+
+    const o2 = okId(await order(R1, L, 1));
+    await prisma.$executeRaw`UPDATE "Order" SET "deadlineAt" = clock_timestamp() WHERE id = ${o2}`;
+    const a2 = await orders.approveOrder(prisma, { orderId: o2, farmerUserId: F });
+    assert.ok(!a2.ok, "期限ちょうど（以上）では承認できない");
+    assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: o2 } })).status, "EXPIRED");
+    assert.equal((await stock(L)).held, 0, "期限切れで仮押さえ解除");
+    await assertInvariant(L);
+  });
+
+  await check("4. 数量減少で差分を即時解除し、送料帯・総額を再計算。再同意・見送り・期限切れで正しい数量", async () => {
+    const L = await newListing(F, { totalKg: 10000, minKg: 1000, stepKg: 500, price: 900 });
+    const slot2 = (await prisma.scheduleSlot.findMany({ where: { listingId: L }, orderBy: { startsAt: "asc" } }))[1];
+    // 再同意
+    const o = okId(await order(R1, L, 3.5));
+    const p = await orders.proposeChange(prisma, { orderId: o, farmerUserId: F, newQuantityGrams: 2000, newScheduleSlotId: slot2.id });
+    assert.ok(p.ok, p.ok ? "" : p.error);
+    assert.equal((await stock(L)).held, 2000, "減らした1.5kgはすぐ解除");
+    const prop = await prisma.orderChangeProposal.findUniqueOrThrow({ where: { orderId: o } });
+    assert.equal(prop.newShippingFeeYen, 800, "2kgなので800円帯");
+    assert.equal(prop.newTotalYen, 1800 + 800);
+    const again = await orders.proposeChange(prisma, { orderId: o, farmerUserId: F, newQuantityGrams: 1000, newScheduleSlotId: slot2.id });
+    assert.ok(!again.ok, "変更案は1回だけ");
+    assert.ok((await orders.reagreeOrder(prisma, { orderId: o, restaurantUserId: R1 })).ok);
+    const done = await prisma.order.findUniqueOrThrow({ where: { id: o } });
+    assert.equal(done.quantityGrams, 2000);
+    assert.equal(done.totalYen, 2600);
+    assert.equal(done.scheduleSlotId, slot2.id);
+    assert.deepEqual(await stock(L), { total: 10000, sold: 2000, held: 0, available: 8000 });
+
+    // 増量はできない
+    const ox = okId(await order(R2, L, 1));
+    assert.ok(!(await orders.proposeChange(prisma, { orderId: ox, farmerUserId: F, newQuantityGrams: 1500, newScheduleSlotId: slot2.id })).ok);
+    // 変更後に見送り
+    const o2 = okId(await order(R2, L, 3));
+    assert.ok((await orders.proposeChange(prisma, { orderId: o2, farmerUserId: F, newQuantityGrams: 2000, newScheduleSlotId: slot2.id })).ok);
+    assert.ok((await orders.declineOrder(prisma, { orderId: o2, farmerUserId: F })).ok);
+    // 変更後に期限切れ
+    const o3 = okId(await order(R3, L, 3));
+    assert.ok((await orders.proposeChange(prisma, { orderId: o3, farmerUserId: F, newQuantityGrams: 1500, newScheduleSlotId: slot2.id })).ok);
+    await prisma.$executeRaw`UPDATE "Order" SET "deadlineAt" = clock_timestamp() - interval '1 second' WHERE id = ${o3}`;
+    assert.ok(!(await orders.reagreeOrder(prisma, { orderId: o3, restaurantUserId: R3 })).ok, "期限後は再同意できない");
+    assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: o3 } })).status, "EXPIRED");
+    // 枠の数（移動先の枠）が戻っていること
+    const s2 = await prisma.scheduleSlot.findUniqueOrThrow({ where: { id: slot2.id } });
+    assert.equal(s2.usedCount, 1, "確定した1件だけが枠を使う");
+    await assertInvariant(L);
+  });
+
+  await check("5. 送料境界（2kgちょうど／2kg超）、無料送料、送料未設定、単価の円未満切り捨て", async () => {
+    const L = await newListing(F, { totalKg: 10000, minKg: 1000, stepKg: 1, price: 333 });
+    const a = await prisma.order.findUniqueOrThrow({ where: { id: okId(await order(R1, L, 2)) } });
+    assert.equal(a.itemSubtotalYen, 666);
+    assert.equal(a.shippingFeeYen, 800);
+    const b = await prisma.order.findUniqueOrThrow({ where: { id: okId(await order(R1, L, 2.001)) } });
+    assert.equal(b.itemSubtotalYen, 666, "666.333円 → 666円");
+    assert.equal(b.shippingFeeYen, 1000, "2kg超は次の帯");
+    const free = await newListing(F, { totalKg: 10000, minKg: 1000, stepKg: 1000, price: 500, method: "PICKUP" });
+    const c = await prisma.order.findUniqueOrThrow({ where: { id: okId(await order(R1, free, 3)) } });
+    assert.equal(c.shippingFeeYen, 0);
+    assert.equal(c.totalYen, 1500);
+    const unset = await order(RH, L, 1);
+    assert.ok(!unset.ok && /送料が未設定/.test(unset.error), "兵庫県は送料未設定で申込不可");
+    assert.equal((await stock(L)).held, 2000 + 2001, "未設定の申込は仮押さえしない");
+    const notAllowed = await order(R1, (await newListing(F, { totalKg: 5000, minKg: 1000, stepKg: 500, price: 500 })), 1.2);
+    assert.ok(!notAllowed.ok, "単位に合わない数量は拒否");
+  });
+
+  await check("6. 出品編集・再公開で在庫をリセットせず、既存注文の条件を上書きしない", async () => {
+    const L = await newListing(F, { totalKg: 10000, minKg: 1000, stepKg: 1000, price: 900 });
+    const o1 = okId(await order(R1, L, 3));
+    assert.ok((await orders.approveOrder(prisma, { orderId: o1, farmerUserId: F })).ok);
+    okId(await order(R2, L, 2));
+    const low = await updateListing(prisma, { farmerUserId: F, listingId: L, unitPriceYenPerKg: 500, totalGrams: 4000 });
+    assert.ok(!low.ok, "確定3kg＋仮押さえ2kg＝5kg 未満にはできない");
+    assert.ok((await updateListing(prisma, { farmerUserId: F, listingId: L, unitPriceYenPerKg: 500, totalGrams: 8000 })).ok);
+    const kept = await prisma.order.findUniqueOrThrow({ where: { id: o1 } });
+    assert.equal(kept.snapUnitPriceYenPerKg, 900, "既存注文の単価は申込時のまま");
+    assert.equal(kept.totalYen, 2700 + 1000);
+
+    assert.ok((await closeListing(prisma, { farmerUserId: F, listingId: L })).ok);
+    const tooMuch = await republishListing(prisma, { farmerUserId: F, listingId: L, data: { ...listingInput({ totalKg: 9000, minKg: 1000, stepKg: 1000, price: 600 }) }, photo: PHOTO });
+    assert.ok(!tooMuch.ok, "現在の残り（3kg）より多くは再公開できない");
+    const re = await republishListing(prisma, { farmerUserId: F, listingId: L, data: { ...listingInput({ totalKg: 2000, minKg: 1000, stepKg: 1000, price: 600 }) }, photo: PHOTO });
+    assert.ok(re.ok, re.ok ? "" : re.error);
+    const s = await stock(L);
+    assert.deepEqual(s, { total: 3000 + 2000 + 2000, sold: 3000, held: 2000, available: 2000 }, "最初の10kgには戻らない");
+    const l = await prisma.listing.findUniqueOrThrow({ where: { id: L } });
+    assert.equal(l.publishRound, 2);
+    assert.equal(await prisma.listingPhoto.count({ where: { listingId: L, publishRound: 2 } }), 1, "再公開用の新しい写真");
+    assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: o1 } })).snapUnitPriceYenPerKg, 900);
+    await assertInvariant(L);
+  });
+
+  await check("7. 予備相談は在庫を押さえず、第一候補が回答待ち・確定の間は予備注文へ進めない", async () => {
+    const L1 = await newListing(F, { totalKg: 5000, minKg: 1000, stepKg: 1000, price: 500 });
+    const L2 = await newListing(F2, { totalKg: 5000, minKg: 1000, stepKg: 1000, price: 500 });
+    const primary = okId(await order(R1, L1, 2));
+    const inq = await records.openInquiry(prisma, { listingId: L2, restaurantUserId: R1, primaryOrderId: primary, body: "予備で2kgお願いできますか" });
+    assert.ok(inq.ok);
+    assert.equal((await stock(L2)).held, 0, "相談では仮押さえしない");
+    const blocked = await order(R1, L2, 2, { inquiryId: inq.ok ? inq.inquiryId : "" });
+    assert.ok(!blocked.ok && /回答待ち/.test(blocked.error));
+    assert.ok((await orders.approveOrder(prisma, { orderId: primary, farmerUserId: F })).ok);
+    const blocked2 = await order(R1, L2, 2, { inquiryId: inq.ok ? inq.inquiryId : "" });
+    assert.ok(!blocked2.ok && /販売確定/.test(blocked2.error), "第一候補が確定済みなら進めない");
+
+    const p2 = okId(await order(R2, L1, 1));
+    const inq2 = await records.openInquiry(prisma, { listingId: L2, restaurantUserId: R2, primaryOrderId: p2, body: "予備" });
+    assert.ok(inq2.ok);
+    assert.ok((await orders.cancelOrder(prisma, { orderId: p2, restaurantUserId: R2 })).ok);
+    const go = await order(R2, L2, 1, { inquiryId: inq2.ok ? inq2.inquiryId : "" });
+    assert.ok(go.ok, go.ok ? "" : go.error);
+    const conv = await prisma.listingInquiry.findUniqueOrThrow({ where: { id: inq2.ok ? inq2.inquiryId : "" } });
+    assert.equal(conv.status, "CONVERTED");
+  });
+
+  await check("8. 他人のIDを指定しても閲覧・変更できない", async () => {
+    const L = await newListing(F, { totalKg: 5000, minKg: 1000, stepKg: 1000, price: 500 });
+    const o = okId(await order(R1, L, 1));
+    assert.ok(!(await orders.cancelOrder(prisma, { orderId: o, restaurantUserId: R2 })).ok, "他店は取消できない");
+    assert.ok(!(await orders.approveOrder(prisma, { orderId: o, farmerUserId: F2 })).ok, "他の農家は承認できない");
+    assert.ok(!(await orders.approveOrder(prisma, { orderId: o, farmerUserId: R1 })).ok, "店は承認できない");
+    assert.ok(!(await records.postOrderMessage(prisma, { orderId: o, userId: R2, body: "のぞき見" })).ok, "他店は相談に書けない");
+    assert.ok(!(await updateListing(prisma, { farmerUserId: F2, listingId: L, unitPriceYenPerKg: 1, totalGrams: 5000 })).ok, "他の農家は出品を編集できない");
+    assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: o } })).status, "AWAITING_RESPONSE");
+  });
+
+  await check("9. 支払申告と入金確認は別。申告の連打で予定は延びず、自動確認されない。前払い未確認の発送は警告", async () => {
+    const L = await newListing(F, { totalKg: 5000, minKg: 1000, stepKg: 1000, price: 500 });
+    const o = okId(await order(R1, L, 1));
+    assert.ok(!(await records.reportPayment(prisma, { orderId: o, userId: R1 })).ok, "確定前は記録できない");
+    assert.ok((await orders.approveOrder(prisma, { orderId: o, farmerUserId: F })).ok);
+    const sent = await records.markSent(prisma, { orderId: o, userId: F });
+    assert.ok(!sent.ok && /入金確認/.test(sent.error), "前払い・入金未確認の発送は再確認が必要");
+    assert.ok((await records.reportPayment(prisma, { orderId: o, userId: R1 })).ok);
+    const first = (await prisma.paymentRecord.findUniqueOrThrow({ where: { orderId: o } })).firstReportedAt;
+    await new Promise((r) => setTimeout(r, 50));
+    assert.ok((await records.reportPayment(prisma, { orderId: o, userId: R1 })).ok);
+    const pay = await prisma.paymentRecord.findUniqueOrThrow({ where: { orderId: o } });
+    assert.equal(pay.status, "BUYER_REPORTED", "店の申告だけでは確認済みにならない");
+    assert.equal(pay.firstReportedAt?.getTime(), first?.getTime(), "確認予定の起点は最初の申告のまま");
+    assert.ok(!(await records.confirmPayment(prisma, { orderId: o, userId: R1 })).ok, "店は入金確認できない");
+    assert.ok((await records.confirmPayment(prisma, { orderId: o, userId: F })).ok);
+    assert.ok((await records.markSent(prisma, { orderId: o, userId: F })).ok);
+    assert.ok((await records.markReceived(prisma, { orderId: o, userId: R1 })).ok);
+    const fix = await records.correctRecord(prisma, { orderId: o, userId: F, target: "sent", reason: "記録の押し間違い" });
+    assert.ok(fix.ok);
+    assert.equal(await prisma.recordCorrection.count({ where: { orderId: o } }), 1, "訂正の履歴が残る");
+    assert.ok(!(await records.correctRecord(prisma, { orderId: o, userId: F, target: "received", reason: "x" })).ok, "他人の記録は訂正できない");
+    assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: o } })).status, "CONFIRMED", "注文状態は戻らない");
+  });
+
+  await check("検索：通常候補・追加量候補・送料未設定の振り分け、AIなしで動く", async () => {
+    const L = await newListing(F, { totalKg: 10000, minKg: 1500, stepKg: 500, price: 400 });
+    const base = {
+      itemQuery: "テスト茄子",
+      itemMode: "EXACT" as const,
+      budgetYen: 100_000,
+      useDate,
+      deliveryMethod: "ANY" as const,
+      purchaseConfirmByAt: confirmBy,
+      showUnsetShipping: true,
+      sort: "fair" as const,
+      seed: "abc",
+    };
+    const r1 = await searchListings(prisma, R1, { ...base, quantityGrams: 1000, extraGrams: 0 });
+    assert.ok(!r1.normal.some((c) => c.listingId === L), "最低1.5kgなので1kg希望の通常候補には出ない");
+    const r2 = await searchListings(prisma, R1, { ...base, quantityGrams: 1000, extraGrams: 500 });
+    const ex = r2.extra.find((c) => c.listingId === L);
+    assert.ok(ex, "追加0.5kgまで許容すると別枠に出る");
+    assert.equal(ex.purchaseGrams, 1500);
+    const r3 = await searchListings(prisma, R1, { ...base, quantityGrams: 1500, extraGrams: 0 });
+    assert.ok(r3.normal.some((c) => c.listingId === L));
+    const r4 = await searchListings(prisma, RH, { ...base, quantityGrams: 1500, extraGrams: 0 });
+    assert.ok(r4.unsetShipping.some((c) => c.listingId === L), "兵庫県は送料未設定の相談枠");
+    assert.ok(!r4.normal.some((c) => c.listingId === L));
+    const tight = await searchListings(prisma, R1, { ...base, quantityGrams: 1500, extraGrams: 0, purchaseConfirmByAt: new Date(now0.getTime() + 3_600_000) });
+    assert.ok(!tight.normal.some((c) => c.listingId === L), "回答猶予24時間が確定希望時刻に収まらない出品は出ない");
+  });
+} finally {
+  // このテストで作ったデータだけを削除する
+  const users = await prisma.user.findMany({ where: { id: { startsWith: `${RUN}-` } }, select: { id: true } });
+  const ids = users.map((u) => u.id);
+  await prisma.listingInquiry.deleteMany({ where: { restaurant: { userId: { in: ids } } } });
+  await prisma.order.deleteMany({ where: { restaurant: { userId: { in: ids } } } });
+  await prisma.listing.deleteMany({ where: { farmer: { userId: { in: ids } } } });
+  await prisma.rateLimit.deleteMany({ where: { key: { contains: RUN } } });
+  await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  console.log(`\nテスト用データを削除しました（${ids.length}アカウント分）`);
+  console.log(`結果：成功 ${passed}／失敗 ${failed}`);
+  process.exit(failed ? 1 : 0);
+}

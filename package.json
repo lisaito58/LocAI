@@ -7,9 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "check:gemini": "tsx --conditions=react-server scripts/check-gemini.mts",
+    "check:ai-fallback": "tsx --conditions=react-server scripts/check-ai-fallback.mts",
+    "test:unit": "tsx --test scripts/test-unit.mts",
+    "test:integration": "tsx --conditions=react-server scripts/test-integration.mts",
+    "seed:demo": "tsx --conditions=react-server scripts/seed-demo.mts"
   },
   "dependencies": {
+    "@google/genai": "2.24.0",
     "@prisma/adapter-neon": "7.10.0",
     "@prisma/client": "7.10.0",
     "better-auth": "1.7.7",
@@ -29,6 +35,7 @@
     "eslint-config-next": "16.4.0",
     "prisma": "7.10.0",
     "tailwindcss": "^4",
+    "tsx": "4.23.15",
     "typescript": "^5"
   }
 }

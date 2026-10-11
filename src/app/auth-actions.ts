@@ -27,7 +27,8 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
     }
     throw error;
   }
-  redirect("/");
+  // 登録後はまずプロフィールを入力してもらう
+  redirect(parsed.data.role === "FARMER" ? "/farm/profile" : "/shop/profile");
 }
 
 export async function signIn(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -39,15 +40,17 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
   }
 
+  let role: unknown;
   try {
-    await auth.api.signInEmail({ body: parsed.data, headers: await headers() });
+    const result = await auth.api.signInEmail({ body: parsed.data, headers: await headers() });
+    role = (result.user as { role?: unknown }).role;
   } catch (error) {
     if (isAPIError(error)) {
       return { message: "メールアドレスまたはパスワードが違います。" };
     }
     throw error;
   }
-  redirect("/");
+  redirect(role === "FARMER" ? "/farm" : role === "RESTAURANT" ? "/shop/search" : "/");
 }
 
 export async function signOut() {

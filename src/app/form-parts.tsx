@@ -1,18 +1,23 @@
 // フォームで共通に使う部品と見た目
-export const labelClass = "font-medium";
-export const inputClass = "rounded border border-gray-400 px-3 py-2";
-export const submitClass =
-  "rounded bg-green-700 px-4 py-2 font-medium text-white hover:bg-green-800 disabled:opacity-60";
+export const labelClass = "label";
+export const inputClass = "input";
+export const submitClass = "btn-primary w-full";
 
 export function FieldError({ errors }: { errors?: string[] }) {
   if (!errors?.length) return null;
-  return <p className="text-sm text-red-700">{errors[0]}</p>;
+  return <p className="text-sm font-medium text-red-700">⚠️ {errors[0]}</p>;
 }
 
-export function FormMessage({ message }: { message?: string }) {
+export function FormMessage({ message, tone = "error" }: { message?: string; tone?: "error" | "ok" }) {
   if (!message) return null;
   return (
-    <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">
+    <p
+      role={tone === "error" ? "alert" : "status"}
+      className={`rounded-2xl p-3 text-sm whitespace-pre-line ${
+        tone === "error" ? "bg-red-50 text-red-800" : "bg-green-50 text-green-900"
+      }`}
+    >
+      {tone === "error" ? "⚠️ " : "✅ "}
       {message}
     </p>
   );
