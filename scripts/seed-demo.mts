@@ -2,32 +2,9 @@
 // 実行：npm run seed:demo
 // すでに同じメールのデモアカウントがあれば作り直さない。パスワードは DEMO_PASSWORD（未設定なら下の初期値）。
 import "./load-env";
-import { hashPassword } from "better-auth/crypto";
-import { dbNow } from "../src/lib/domain/tx";
-import { prisma } from "../src/lib/prisma";
+import { seedAccounts, type FarmerSeed, type RestaurantSeed } from "./seed-lib";
 
 const PASSWORD = process.env.DEMO_PASSWORD || "locai-demo-2026";
-const now = await dbNow(prisma);
-const h = (hours: number) => new Date(now.getTime() + hours * 3_600_000);
-
-type FarmerSeed = {
-  email: string;
-  name: string;
-  joinedDaysAgo: number;
-  profile: { farmName: string; prefecture: string; city: string; mainItems: string; commitment: string; introduction: string; responseGuide: string; availableWeekdays: string };
-  listings: {
-    itemName: string;
-    description: string;
-    selfDeclaredFeatures?: string;
-    sizeLabel?: string;
-    price: number;
-    totalKg: number;
-    minKg: number;
-    stepKg: number;
-    graceHours: number;
-    pickup?: boolean;
-  }[];
-};
 
 const farmers: FarmerSeed[] = [
   {
@@ -89,105 +66,11 @@ const farmers: FarmerSeed[] = [
   },
 ];
 
-const restaurants = [
-  { email: "demo-shop1@locai.example", name: "デモ店主 三浦", shopName: "小料理 みかん（デモ）", prefecture: "大阪府", city: "大阪市福島区" },
-  { email: "demo-shop2@locai.example", name: "デモ店主 北村", shopName: "ビストロ はたけ（デモ）", prefecture: "京都府", city: "京都市中京区" },
+const restaurants: RestaurantSeed[] = [
+  { email: "demo-shop1@locai.example", name: "デモ店主 三浦", profile: { shopName: "小料理 みかん（デモ）", prefecture: "大阪府", city: "大阪市福島区" } },
+  { email: "demo-shop2@locai.example", name: "デモ店主 北村", profile: { shopName: "ビストロ はたけ（デモ）", prefecture: "京都府", city: "京都市中京区" } },
 ];
 
-async function createAccount(email: string, name: string, role: "FARMER" | "RESTAURANT", createdAt = now) {
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return null;
-  const id = crypto.randomUUID();
-  await prisma.user.create({ data: { id, email, name, role, emailVerified: false, createdAt } });
-  await prisma.account.create({
-    data: { id: crypto.randomUUID(), accountId: id, providerId: "credential", userId: id, password: await hashPassword(PASSWORD) },
-  });
-  return id;
-}
-
-const SHIPPING_BANDS = (pref: string) => [
-  { prefecture: pref, minGramsExclusive: 0, maxGramsInclusive: 2000, feeYen: 800 },
-  { prefecture: pref, minGramsExclusive: 2000, maxGramsInclusive: 5000, feeYen: 1000 },
-  { prefecture: pref, minGramsExclusive: 5000, maxGramsInclusive: 10000, feeYen: 1300 },
-  { prefecture: pref, minGramsExclusive: 10000, maxGramsInclusive: 30000, feeYen: 1800 },
-];
-
-let created = 0;
-for (const f of farmers) {
-  const userId = await createAccount(f.email, f.name, "FARMER", new Date(now.getTime() - f.joinedDaysAgo * 86_400_000));
-  if (!userId) {
-    console.log(`- ${f.email} はすでにあるので作りません`);
-    continue;
-  }
-  const farmer = await prisma.farmerProfile.create({
-    data: { userId, ...f.profile, addressLine: "（架空の住所）1-2-3", contactPhone: "000-0000-0000", paymentConfirmGuideHours: 24 },
-  });
-  for (const l of f.listings) {
-    const listing = await prisma.listing.create({
-      data: {
-        farmerId: farmer.id,
-        status: "PUBLISHED",
-        itemName: l.itemName,
-        description: `${l.description}（デモデータ：実物写真なし）`,
-        selfDeclaredFeatures: l.selfDeclaredFeatures ?? null,
-        sizeLabel: l.sizeLabel ?? null,
-        unitPriceYenPerKg: l.price,
-        totalGrams: l.totalKg * 1000,
-        minOrderGrams: l.minKg * 1000,
-        orderStepGrams: l.stepKg * 1000,
-        responseGraceMinutes: l.graceHours * 60,
-        acceptDeadlineAt: h(24 * 4),
-        responseDeadlineAt: h(24 * 5),
-        publishedAt: now,
-      },
-    });
-    const shipping = await prisma.deliveryOption.create({
-      data: {
-        listingId: listing.id,
-        method: "SHIPPING",
-        paymentTiming: "PREPAID",
-        paymentMethod: "BANK_TRANSFER",
-        prepayDeadlineAt: h(24 * 5 + 6),
-        paymentConfirmGuideHours: 24,
-        shippingRates: { create: [...SHIPPING_BANDS("大阪府"), ...SHIPPING_BANDS("京都府")] },
-      },
-    });
-    await prisma.scheduleSlot.createMany({
-      data: [6, 7, 9].map((d) => ({ listingId: listing.id, deliveryOptionId: shipping.id, startsAt: h(24 * d) })),
-    });
-    if (l.pickup) {
-      const pickup = await prisma.deliveryOption.create({
-        data: {
-          listingId: listing.id,
-          method: "PICKUP",
-          paymentTiming: "ON_HANDOVER",
-          paymentMethod: "CASH",
-          paymentConfirmGuideHours: 24,
-          shippingRates: {
-            create: ["大阪府", "京都府"].map((p) => ({ prefecture: p, minGramsExclusive: 0, maxGramsInclusive: 1_000_000, feeYen: 0 })),
-          },
-        },
-      });
-      await prisma.scheduleSlot.createMany({
-        data: [6, 8].map((d) => ({ listingId: listing.id, deliveryOptionId: pickup.id, startsAt: h(24 * d + 2), capacity: 3 })),
-      });
-    }
-    created++;
-  }
-  console.log(`+ ${f.profile.farmName}（${f.email}）と出品${f.listings.length}件`);
-}
-
-for (const r of restaurants) {
-  const userId = await createAccount(r.email, r.name, "RESTAURANT");
-  if (!userId) {
-    console.log(`- ${r.email} はすでにあるので作りません`);
-    continue;
-  }
-  await prisma.restaurantProfile.create({
-    data: { userId, shopName: r.shopName, prefecture: r.prefecture, city: r.city, addressLine: "（架空の住所）4-5-6", contactPhone: "000-0000-0000" },
-  });
-  console.log(`+ ${r.shopName}（${r.email}）`);
-}
-
-console.log(`\n完了：出品 ${created} 件を作成しました。デモアカウントのパスワードは DEMO_PASSWORD（未設定なら初期値）です。`);
+const { listingCount } = await seedAccounts({ password: PASSWORD, dataLabel: "デモデータ", farmers, restaurants });
+console.log(`\n完了：出品 ${listingCount} 件を作成しました。デモアカウントのパスワードは DEMO_PASSWORD（未設定なら初期値）です。`);
 process.exit(0);
