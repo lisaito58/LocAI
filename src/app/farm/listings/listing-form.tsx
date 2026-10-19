@@ -135,10 +135,14 @@ export function ListingForm({ mode, sourceId, initial, farmPrefecture, currentAv
     if (Object.keys(e).length === 0) setStep(step + 1);
   }
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+  // Enterキーで送信されたときは「次へ」と同じ扱い。公開は最後のステップの「公開する」ボタンでだけ行う
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    // Enterキーなどで送信されても、最後のステップ以外では公開しない
-    if (step < 2) return next();
+    if (step < 2) next();
+  }
+
+  async function publish() {
+    if (step !== 2) return;
     setClientError(null);
     for (const s of [0, 1]) {
       const errs = validateStep(s, v, photo, selfTaken);
@@ -587,16 +591,17 @@ export function ListingForm({ mode, sourceId, initial, farmPrefecture, currentAv
       {/* 戻る／次へ／公開する */}
       <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-3xl bg-white/95 p-2 shadow-[0_-4px_16px_-8px_rgb(0_0_0/0.25)] md:bottom-2">
         {step > 0 && (
-          <button type="button" onClick={() => setStep(step - 1)} className="btn-secondary flex-1">
+          <button key="back" type="button" onClick={() => setStep(step - 1)} className="btn-secondary flex-1">
             ← 戻る
           </button>
         )}
+        {/* 「次へ」と「公開する」は別のボタンにする（同じボタンの使い回しで、次へのクリックが公開にならないように） */}
         {step < 2 ? (
-          <button type="button" onClick={next} className="btn-primary flex-[2]">
+          <button key="next" type="button" onClick={next} className="btn-primary flex-[2]">
             次へ：{STEPS[step + 1]} →
           </button>
         ) : (
-          <button type="submit" disabled={pending} className="btn-primary flex-[2] py-3 text-lg">
+          <button key="publish" type="button" onClick={publish} disabled={pending} className="btn-primary flex-[2] py-3 text-lg">
             {pending ? "公開しています…🌱" : mode === "republish" ? "🔁 この内容で再公開する" : "🌾 この内容で公開する"}
           </button>
         )}
