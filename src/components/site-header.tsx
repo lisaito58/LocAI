@@ -24,7 +24,7 @@ export async function SiteHeader() {
     }
   }
   return (
-    <header className="sticky top-0 z-20 border-b border-green-100 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-green-100 bg-white">
       <div className="mx-auto flex min-h-16 max-w-5xl items-center gap-3 px-4 py-2">
         <Link href={user ? (user.role === "FARMER" ? "/farm" : "/shop") : "/"} className="flex shrink-0 items-center gap-1.5 text-xl font-bold text-leaf-dark">
           <span className="text-2xl" aria-hidden>
