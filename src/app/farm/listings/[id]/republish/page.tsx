@@ -8,6 +8,7 @@ import { gramsToKgText } from "@/lib/domain/units";
 import { requireFarmer } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { draftFromListing } from "../../draft-server";
+import { splitItems } from "../../listing-defaults";
 import { ListingForm } from "../../listing-form";
 
 export const metadata: Metadata = { title: "残りを再公開 | LocAI" };
@@ -49,6 +50,7 @@ async function Content({ params }: Pick<PageProps<"/farm/listings/[id]/republish
       initial={draftFromListing(listing, now, "republish", available)}
       farmPrefecture={profile.prefecture}
       currentAvailableKg={gramsToKgText(available)}
+      farmItems={splitItems(profile.mainItems)}
     />
   );
 }

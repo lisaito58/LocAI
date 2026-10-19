@@ -84,8 +84,8 @@ export const deliveryOptionSchema = z
           feeYen: yen("送料"),
         }),
       )
-      .min(1, "送料（無料・引き取りは0円）を1行以上登録してください")
-      .max(100),
+      .max(100)
+      .default([]),
     slots: z
       .array(
         z.object({
@@ -121,6 +121,9 @@ export const listingSchema = z.object({
   photoTakenOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "写真の撮影日を入力してください"),
   photoSelfTaken: z.literal(true, "「自分で撮った販売する野菜の写真です」を確認してください"),
   deliveryOptions: z.array(deliveryOptionSchema).min(1, "受け渡し方法を1つ以上登録してください").max(3),
+  // 早めに販売したい（任意）。販売希望期限＝この日時までに販売確定させたい農家の希望（消費期限ではない）
+  earlySale: z.boolean().optional().default(false),
+  saleTargetAt: z.string().optional(),
 });
 
 export type ListingInput = z.infer<typeof listingSchema>;
@@ -132,7 +135,32 @@ export const listingEditSchema = z.object({
   description: optionalText(500),
   selfDeclaredFeatures: optionalText(500),
   conditionNote: optionalText(200),
+  earlySale: z.preprocess((v) => v === "on" || v === true, z.boolean()),
+  saleTargetAt: z.string().optional(),
 });
+
+// 販売希望期限のルール（出品・再公開・販売条件の見直しで共通）
+// 既存の受付・回答・受け渡し期限は変えない。合意が間に合わない設定は理由を返す。
+export function checkSaleTarget(
+  input: { earlySale: boolean; saleTargetAt?: string | null },
+  ctx: { now: Date; responseGraceMinutes: number; responseDeadlineAt: Date },
+  parse: (s: string) => Date | null,
+): { errors: string[]; saleTargetAt: Date | null } {
+  if (!input.earlySale) return { errors: [], saleTargetAt: null };
+  const t = input.saleTargetAt ? parse(input.saleTargetAt) : null;
+  if (!t) return { errors: ["「早めに販売したい」を選んだ場合は、販売希望期限を入力してください"], saleTargetAt: null };
+  const errors: string[] = [];
+  const earliest = new Date(ctx.now.getTime() + ctx.responseGraceMinutes * 60_000);
+  if (t <= earliest) {
+    errors.push(
+      `回答猶予（${Math.round(ctx.responseGraceMinutes / 60)}時間）を考えると、販売希望期限までに合意が間に合いません。販売希望期限を遅くするか、回答猶予を短くしてください`,
+    );
+  }
+  if (t > ctx.responseDeadlineAt) {
+    errors.push("回答の最終期限より後には合意できないため、販売希望期限は回答の最終期限以前にしてください");
+  }
+  return { errors, saleTargetAt: t };
+}
 
 // 写真のファイル検証（種類は中身の先頭バイトで確認する）
 export const MAX_PHOTO_BYTES = 3 * 1024 * 1024;

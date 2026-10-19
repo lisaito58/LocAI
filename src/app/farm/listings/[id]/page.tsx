@@ -67,7 +67,23 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
 
   return (
     <div className="flex flex-col gap-5">
-      {done === "created" && <Notice tone="ok">🎉 出品しました！お店からの購入希望を待ちましょう。</Notice>}
+      {done === "created" && (
+        <Notice tone="ok">
+          <p className="text-lg font-bold">🎉 出品しました</p>
+          <p>お店から購入希望が届くと、ホームの「今やること」と下の一覧に表示されます。次にできること：</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link href="/farm" className="btn-secondary btn-sm">
+              🏡 ホームへ
+            </Link>
+            <Link href="/farm/listings/new" className="btn-secondary btn-sm">
+              ＋ ほかの野菜も出品する
+            </Link>
+            <Link href="/farm/listings" className="btn-secondary btn-sm">
+              🌾 出品一覧を見る
+            </Link>
+          </div>
+        </Notice>
+      )}
       {done === "republished" && <Notice tone="ok">🔁 再公開しました。残りの量で受付を再開しています。</Notice>}
 
       <section className="card flex flex-col gap-4 sm:flex-row">
@@ -97,6 +113,9 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
             ⏰ 受付期限 <strong>{formatJst(listing.acceptDeadlineAt)}</strong> ／ 回答の最終期限 <strong>{formatJst(listing.responseDeadlineAt)}</strong>
           </p>
           <StockBar total={listing.totalGrams} sold={listing.soldGrams} held={listing.heldGrams} />
+          {listing.earlySale && listing.saleTargetAt && (
+            <p className="text-sm font-bold text-orange-900">⏳ 早めに販売したい：販売希望期限 {formatJst(listing.saleTargetAt)}（受付・回答・受け渡しの期限は別です）</p>
+          )}
           <div className="mt-1 flex flex-wrap gap-2">
             {accepting && (
               <ActionButton action={closeListingAction.bind(null, listing.id)} className="btn-secondary btn-sm" confirmText="新しい申込の受付を終了しますか？（既存の注文はそのまま有効です）">
@@ -108,6 +127,9 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
                 🔁 残りを再公開
               </Link>
             )}
+            <Link href={`/farm/listings/${listing.id}/review`} className="btn-secondary btn-sm">
+              🔎 販売条件を見直す（試算・早めに販売）
+            </Link>
             <Link href={`/farm/listings/new?copy=${listing.id}`} className="btn-secondary btn-sm">
               📋 前回から複製して新しく出品
             </Link>

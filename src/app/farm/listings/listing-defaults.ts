@@ -28,6 +28,8 @@ export type ListingDraft = {
   responseDeadlineAt: string;
   photoTakenOn: string;
   deliveryOptions: Option[];
+  earlySale: boolean; // 早めに販売したい（任意）
+  saleTargetAt: string; // 販売希望期限（日本時間）
 };
 
 export type ListingFormProps = {
@@ -36,7 +38,13 @@ export type ListingFormProps = {
   initial: ListingDraft;
   farmPrefecture: string;
   currentAvailableKg?: string;
+  farmItems: string[]; // 農園情報に登録した品目（食材欄の候補）
 };
+
+// 農園情報の「主な品目」を候補の一覧にする（区切り：、，,・／/ 空白）
+export function splitItems(text: string | null | undefined): string[] {
+  return [...new Set((text ?? "").split(/[、，,・／/\s]+/).map((s) => s.trim()).filter(Boolean))].slice(0, 50);
+}
 
 export const METHOD_EMOJI: Record<Method, string> = { SHIPPING: "📦", HAND_DELIVERY: "🚚", PICKUP: "🏡" };
 

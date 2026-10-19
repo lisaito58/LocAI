@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { StockBar } from "@/components/stock-bar";
 import { EmptyState, itemEmoji, Loading, Notice, Page, PageTitle } from "@/components/ui";
 import { expireDueOrders } from "@/lib/domain/orders";
+import { SOON_HOURS } from "@/lib/domain/todo";
 import { dbNow } from "@/lib/domain/tx";
 import { formatJst, formatYen } from "@/lib/domain/units";
 import { requireFarmer } from "@/lib/guard";
@@ -14,7 +15,7 @@ export const metadata: Metadata = { title: "出品一覧 | LocAI" };
 export default function FarmListingsPage() {
   return (
     <Page>
-      <PageTitle emoji="🌾" title="出品一覧" lead="出品ごとの在庫と、届いた購入希望の数を確認できます。" />
+      <PageTitle emoji="🌾" title="出品" lead="出品ごとの在庫と、届いた購入希望の数を確認できます。" />
       <Suspense fallback={<Loading />}>
         <Content />
       </Suspense>
@@ -33,6 +34,7 @@ async function Content() {
   }
   await expireDueOrders(prisma, { farmerId: profile.id });
   const now = await dbNow(prisma);
+  const soon = new Date(now.getTime() + SOON_HOURS * 3_600_000);
   const listings = await prisma.listing.findMany({
     where: { farmerId: profile.id },
     orderBy: [{ status: "asc" }, { acceptDeadlineAt: "asc" }],
@@ -47,7 +49,7 @@ async function Content() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap gap-3">
         <Link href="/farm/listings/new" className="btn-primary">
-          ＋ 新しく出品
+          ＋ 野菜を出品する
         </Link>
         <Link href="/farm/orders" className="btn-secondary">
           📬 届いた注文を見る
@@ -56,7 +58,7 @@ async function Content() {
       {listings.length === 0 ? (
         <EmptyState emoji="🌱">まだ出品がありません。「新しく出品」から始めましょう。</EmptyState>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div id="soon" className="grid scroll-mt-24 gap-4 sm:grid-cols-2">
           {listings.map((l) => {
             const accepting = l.status === "PUBLISHED" && l.acceptDeadlineAt > now;
             return (
@@ -76,6 +78,12 @@ async function Content() {
                         {accepting ? "🟢 受付中" : l.status === "CLOSED" ? "⏸ 受付終了" : "⌛ 受付期限後"}
                       </span>
                       {l.publishRound > 1 && <span className="badge bg-sky-100 text-sky-800">🔁 再公開{l.publishRound - 1}回</span>}
+                      {accepting && l.earlySale && l.saleTargetAt && l.saleTargetAt > now && (
+                        <span className={`badge ${l.saleTargetAt <= soon ? "bg-orange-200 text-orange-950" : "bg-orange-50 text-orange-900"}`}>
+                          ⏳ 販売希望期限 {formatJst(l.saleTargetAt)}
+                          {l.saleTargetAt <= soon && "（近い）"}
+                        </span>
+                      )}
                     </div>
                     <h2 className="mt-1 truncate text-lg font-bold">
                       {itemEmoji(l.itemName)} {l.itemName}
@@ -90,6 +98,9 @@ async function Content() {
                   {l._count.orders > 0 && <span className="badge bg-amber-100 text-amber-800">⏳ 回答が必要 {l._count.orders}件</span>}
                   {l.inquiries.length > 0 && <span className="badge bg-sky-100 text-sky-800">💬 相談 {l.inquiries.length}件</span>}
                   <span className="flex-1" />
+                  <Link href={`/farm/listings/${l.id}/review`} className="btn-secondary btn-sm">
+                    🔎 販売条件を見直す
+                  </Link>
                   <Link href={`/farm/listings/new?copy=${l.id}`} className="btn-secondary btn-sm">
                     📋 複製
                   </Link>

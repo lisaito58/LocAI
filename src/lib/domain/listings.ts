@@ -1,6 +1,6 @@
 // 出品の作成・公開・編集・受付終了・再公開
 // 再公開は同じ出品IDで行い、総量を最初の値に戻さない。既存注文は申込時のスナップショットを使う。
-import type { ListingInput } from "@/lib/validation/listing";
+import { checkSaleTarget, PREFECTURES, type ListingInput } from "@/lib/validation/listing";
 import { validateShippingBands } from "./shipping";
 import { expireDueOrdersInListing } from "./orders";
 import { dbNow, fail, lockListing, runTx, type Db, type Result, type Tx } from "./tx";
@@ -31,7 +31,7 @@ export function checkListingInput(input: ListingInput, now: Date) {
   const response = jstLocalToDate(input.responseDeadlineAt);
   if (!accept || !response) {
     errors.push("期限の日時が正しくありません");
-    return { errors, options: [] as CheckedOption[], accept: now, response: now };
+    return { errors, options: [] as CheckedOption[], accept: now, response: now, saleTargetAt: null };
   }
   if (accept <= now) errors.push("受付期限は現在より後にしてください");
   if (accept >= response) errors.push("受付期限は回答の最終期限より前にしてください");
@@ -63,14 +63,18 @@ export function checkListingInput(input: ListingInput, now: Date) {
       }
     }
 
-    const rates = o.rates.map((r) => ({
-      prefecture: r.prefecture,
-      minGramsExclusive: r.minKg,
-      maxGramsInclusive: r.maxKg,
-      feeYen: r.feeYen,
-    }));
+    // 引き取りは送料0円。どの地域のお店も申し込めるよう、全都道府県を0円で登録する（入力は求めない）
+    const rates =
+      o.method === "PICKUP"
+        ? PREFECTURES.map((prefecture) => ({ prefecture, minGramsExclusive: 0, maxGramsInclusive: LIMITS.maxQuantityGrams, feeYen: 0 }))
+        : o.rates.map((r) => ({
+            prefecture: r.prefecture,
+            minGramsExclusive: r.minKg,
+            maxGramsInclusive: r.maxKg,
+            feeYen: r.feeYen,
+          }));
     for (const e of validateShippingBands(rates)) errors.push(`${label}：${e}`);
-    if (o.method === "PICKUP" && rates.some((r) => r.feeYen !== 0)) errors.push(`${label}：引き取りの送料は0円にしてください`);
+    if (o.method !== "PICKUP" && rates.length === 0) errors.push(`${label}：送料（無料の場合は0円）を1行以上登録してください`);
 
     return {
       method: o.method,
@@ -85,7 +89,14 @@ export function checkListingInput(input: ListingInput, now: Date) {
   const methods = options.map((o) => o.method);
   if (new Set(methods).size !== methods.length) errors.push("同じ受け渡し方法は1つにまとめてください");
 
-  return { errors, options, accept, response };
+  const sale = checkSaleTarget(
+    { earlySale: input.earlySale ?? false, saleTargetAt: input.saleTargetAt },
+    { now, responseGraceMinutes: input.responseGraceHours * 60, responseDeadlineAt: response },
+    jstLocalToDate,
+  );
+  errors.push(...sale.errors);
+
+  return { errors, options, accept, response, saleTargetAt: sale.saleTargetAt };
 }
 
 async function createOptions(tx: Tx, listingId: string, options: CheckedOption[]) {
@@ -129,7 +140,7 @@ export async function createListing(
     const farmer = await tx.farmerProfile.findUnique({ where: { userId: input.farmerUserId } });
     if (!farmer) fail("先に農園プロフィールを登録してください");
     const now = await dbNow(tx);
-    const { errors, options, accept, response } = checkListingInput(input.data, now);
+    const { errors, options, accept, response, saleTargetAt } = checkListingInput(input.data, now);
     if (errors.length) fail(errors.join("\n"));
 
     let copiedFrom: string | null = null;
@@ -155,6 +166,8 @@ export async function createListing(
         acceptDeadlineAt: accept,
         responseDeadlineAt: response,
         copiedFromListingId: copiedFrom,
+        earlySale: Boolean(saleTargetAt),
+        saleTargetAt,
         publishedAt: now,
       },
     });
@@ -185,7 +198,7 @@ export async function republishListing(
     if (listing.status === "PUBLISHED" && listing.acceptDeadlineAt > now) {
       fail("受付中の出品は再公開できません。受付終了してから再公開してください");
     }
-    const { errors, options, accept, response } = checkListingInput(input.data, now);
+    const { errors, options, accept, response, saleTargetAt } = checkListingInput(input.data, now);
     const committed = listing.soldGrams + listing.heldGrams;
     const currentAvailable = listing.totalGrams - committed;
     const newAvailable = input.data.totalKg; // 再公開フォームの「販売可能量」
@@ -214,6 +227,8 @@ export async function republishListing(
         responseGraceMinutes: d.responseGraceHours * 60,
         acceptDeadlineAt: accept,
         responseDeadlineAt: response,
+        earlySale: Boolean(saleTargetAt),
+        saleTargetAt,
         publishedAt: now,
       },
     });
@@ -236,15 +251,23 @@ export async function updateListing(
     description?: string;
     selfDeclaredFeatures?: string;
     conditionNote?: string;
+    earlySale?: boolean;
+    saleTargetAt?: string;
   },
 ): Promise<Result> {
   return runTx(db, async (tx) => {
-    const { listing } = await loadOwnListing(tx, input.listingId, input.farmerUserId);
+    const { listing, now } = await loadOwnListing(tx, input.listingId, input.farmerUserId);
     const committed = listing.soldGrams + listing.heldGrams;
     if (input.totalGrams < committed) {
       fail(`出品総量は、販売確定量と仮押さえ量の合計（${committed / 1000}kg）未満にできません`);
     }
     if (input.totalGrams > LIMITS.maxQuantityGrams) fail("出品総量は1,000kg以下にしてください");
+    const sale = checkSaleTarget(
+      { earlySale: input.earlySale ?? false, saleTargetAt: input.saleTargetAt },
+      { now, responseGraceMinutes: listing.responseGraceMinutes, responseDeadlineAt: listing.responseDeadlineAt },
+      jstLocalToDate,
+    );
+    if (sale.errors.length) fail(sale.errors.join("\n"));
     await tx.listing.update({
       where: { id: listing.id },
       data: {
@@ -253,6 +276,8 @@ export async function updateListing(
         description: input.description ?? null,
         selfDeclaredFeatures: input.selfDeclaredFeatures ?? null,
         conditionNote: input.conditionNote ?? null,
+        // 値下げしなくても「早めに販売したい」にできる。既存注文の条件は変えない
+        ...(input.earlySale !== undefined && { earlySale: Boolean(sale.saleTargetAt), saleTargetAt: sale.saleTargetAt }),
       },
     });
     return {};

@@ -55,6 +55,7 @@ function listingInput(o: { totalKg: number; minKg: number; stepKg: number; price
     description: undefined,
     selfDeclaredFeatures: undefined,
     conditionNote: undefined,
+    earlySale: false,
     unitPriceYenPerKg: o.price,
     totalKg: o.totalKg,
     minKg: o.minKg,
