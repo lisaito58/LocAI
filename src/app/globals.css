@@ -26,6 +26,18 @@
   --font-sans: var(--font-maru), "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif;
 }
 
+/* 文字サイズ「大きめ」：rem で作っている文字・余白・ボタンがまとめて大きくなる */
+html[data-text="large"] {
+  font-size: 118.75%;
+}
+
+/* スマホの下部メニューで本文や送信ボタンが隠れないよう、下に余白を取る */
+@media (max-width: 767px) {
+  body:has(#bottom-nav) {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 body {
   background-color: var(--background);
   /* うっすら葉っぱの水玉模様 */
@@ -48,7 +60,7 @@ body {
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 py-2.5 text-center font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 @utility btn-primary {
@@ -64,11 +76,11 @@ body {
 }
 
 @utility btn-sm {
-  @apply px-3.5 py-1.5 text-sm;
+  @apply min-h-10 px-4 py-1.5 text-sm;
 }
 
 @utility input {
-  @apply w-full rounded-2xl border-2 border-green-100 bg-white px-3.5 py-2.5 outline-none transition focus:border-leaf focus:ring-4 focus:ring-green-100;
+  @apply min-h-11 w-full min-w-0 rounded-2xl border-2 border-green-200 bg-white px-3.5 py-2.5 text-base text-gray-900 outline-none transition placeholder:text-gray-500 focus:border-leaf focus:ring-4 focus:ring-green-100 disabled:bg-gray-100 disabled:text-gray-600 aria-invalid:border-red-600;
 }
 
 @utility label {
@@ -76,7 +88,7 @@ body {
 }
 
 @utility hint {
-  @apply text-xs text-green-900/60;
+  @apply text-sm text-gray-700;
 }
 
 @utility badge {
@@ -85,6 +97,14 @@ body {
 
 @utility link {
   @apply font-bold text-leaf underline decoration-sprout decoration-2 underline-offset-4 hover:text-leaf-dark;
+}
+
+/* 必須・任意の文字表示（色だけに頼らない） */
+@utility req {
+  @apply ml-1.5 inline-block rounded-md border border-red-700 px-1.5 text-xs leading-5 font-bold text-red-800;
+}
+@utility opt {
+  @apply ml-1.5 inline-block rounded-md border border-gray-500 px-1.5 text-xs leading-5 font-bold text-gray-700;
 }
 
 @utility section-title {
@@ -101,4 +121,16 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .float { animation: none; }
+}
+
+/* 選択欄：長い選択肢でも文字が切れず、右の矢印と重ならないようにする */
+select.input {
+  text-overflow: ellipsis;
+  padding-right: 2.25rem;
+}
+
+/* キーボード操作で今どこにいるかを見えるようにする */
+:focus-visible {
+  outline: 3px solid var(--leaf);
+  outline-offset: 2px;
 }

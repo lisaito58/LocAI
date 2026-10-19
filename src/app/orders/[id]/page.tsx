@@ -17,6 +17,7 @@ import {
   reportPaymentAction,
 } from "@/app/actions/orders";
 import { ActionButton } from "@/components/action-button";
+import { ReviewForm } from "@/components/reviews";
 import { itemEmoji, Loading, Notice, Page, StatusBadge } from "@/components/ui";
 import { estimateReceipt } from "@/lib/domain/estimate";
 import { PAYMENT_STATUS_LABELS } from "@/lib/domain/order-labels";
@@ -66,6 +67,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
       events: { orderBy: { createdAt: "asc" } },
       corrections: { orderBy: { createdAt: "asc" } },
       costMemos: { where: { kind: "ACTUAL" } },
+      review: { include: { reply: true } },
       scheduleSlot: { select: { deliveryOptionId: true } },
     },
   });
@@ -74,9 +76,23 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
   const confirmed = order.status === "CONFIRMED";
   const p = order.changeProposal;
   const pendingProposal = p && !p.respondedAt && order.status === "AWAITING_REAGREEMENT";
+  // 連絡先は販売確定時に保存した値を使う（以前の注文で未保存なら、現在のプロフィールを表示）
   const counterpart = isFarmer
-    ? { label: "お店", name: order.restaurant.shopName, area: `${order.restaurant.prefecture}${order.restaurant.city}`, address: order.restaurant.addressLine, phone: order.restaurant.contactPhone }
-    : { label: "農家さん", name: order.farmer.farmName, area: `${order.farmer.prefecture}${order.farmer.city}`, address: order.farmer.addressLine, phone: order.farmer.contactPhone };
+    ? {
+        label: "お店",
+        name: order.restaurant.shopName,
+        area: `${order.restaurant.prefecture}${order.restaurant.city}`,
+        address: order.snapRestaurantAddress ?? `${order.restaurant.prefecture}${order.restaurant.city}${order.restaurant.addressLine}`,
+        phone: order.snapRestaurantPhone ?? order.restaurant.contactPhone,
+      }
+    : {
+        label: "農家さん",
+        name: order.farmer.farmName,
+        area: `${order.farmer.prefecture}${order.farmer.city}`,
+        address: order.snapFarmerAddress ?? `${order.farmer.prefecture}${order.farmer.city}${order.farmer.addressLine}`,
+        phone: order.snapFarmerPhone ?? order.farmer.contactPhone,
+      };
+  const contactFromSnapshot = Boolean(isFarmer ? order.snapRestaurantAddress : order.snapFarmerAddress);
 
   const slots =
     isFarmer && order.status === "AWAITING_RESPONSE" && !p
@@ -227,8 +243,13 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
         <>
           <section className="card flex flex-col gap-3">
             <h2 className="section-title">📇 取引相手の連絡先（販売確定後に表示）</h2>
+            <p className="hint">
+              {contactFromSnapshot
+                ? "販売確定したときの住所・電話番号です。プロフィールをあとで変更しても、この注文の届け先は変わりません。"
+                : "この注文は確定時の住所を保存する前の注文のため、現在のプロフィールを表示しています。"}
+            </p>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <Info label="住所" value={`${counterpart.area}${counterpart.address}`} />
+              <Info label="住所" value={counterpart.address} />
               <Info label="電話番号" value={counterpart.phone} />
             </div>
           </section>
@@ -330,7 +351,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
               ✏️ 記録を訂正
             </ActionButton>
             {order.corrections.length > 0 && (
-              <ul className="text-xs text-green-900/70">
+              <ul className="text-xs text-gray-700">
                 {order.corrections.map((c) => (
                   <li key={c.id}>
                     {formatJst(c.createdAt)} {names.get(c.actorId)}：{c.recordType === "payment" ? "支払い" : "受け渡し"}の記録を訂正（理由：{c.reason}）
@@ -378,11 +399,44 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
         </>
       )}
 
+      {/* 取引レビュー（受取済みの注文だけ。未着などの問題は相談欄・要相談から） */}
+      {confirmed && (
+        <section className="card flex flex-col gap-3">
+          <h2 className="section-title">✍️ 取引レビュー</h2>
+          {order.review ? (
+            <div className="rounded-2xl bg-leaf-light/50 p-3">
+              <p className="font-bold">
+                {order.review.rating === "GOOD" ? "😊 よかった" : "🤔 気になる点があった"}
+                {order.review.tags.length > 0 && <span className="ml-2 text-sm font-normal">✔ {order.review.tags.join("・")}</span>}
+              </p>
+              {order.review.comment && <p className="mt-1 whitespace-pre-wrap">{order.review.comment}</p>}
+              {order.review.reply && <p className="mt-2 text-sm">👩‍🌾 返信：{order.review.reply.body}</p>}
+              {isFarmer && (
+                <Link href="/farm/reviews" className="link mt-2 inline-block text-sm">
+                  レビューに返信する →
+                </Link>
+              )}
+            </div>
+          ) : isFarmer ? (
+            <p className="text-gray-700">お店が受け取りを記録すると、レビューが投稿されることがあります。</p>
+          ) : order.fulfillment?.buyerReceivedAt ? (
+            <ReviewForm orderId={order.id} />
+          ) : (
+            <p className="text-gray-700">受け取りを記録すると、レビューを書けます。</p>
+          )}
+          {!isFarmer && (
+            <p className="rounded-2xl bg-white px-3 py-2 text-sm ring-1 ring-green-100">
+              届かない・内容が違うなどの問題はレビューの対象外です。下の相談欄で農家さんに連絡し、必要なら「要相談」の目印を付けてください。
+            </p>
+          )}
+        </section>
+      )}
+
       {/* 相談（注文スレッド） */}
       <section className="card flex flex-col gap-3">
         <h2 className="section-title">💬 この注文の相談（当事者だけが見られます）</h2>
         {order.messages.length === 0 ? (
-          <p className="text-sm text-green-900/60">まだメッセージはありません。</p>
+          <p className="text-sm text-gray-700">まだメッセージはありません。</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {order.messages.map((m) => (
@@ -426,7 +480,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
 function Info({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="rounded-xl bg-leaf-light/50 px-3 py-1.5">
-      <div className="text-xs text-green-900/60">{label}</div>
+      <div className="text-xs text-gray-700">{label}</div>
       <div className={strong ? "text-xl font-bold text-leaf-dark" : "font-bold"}>{value}</div>
     </div>
   );

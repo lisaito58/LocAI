@@ -6,6 +6,7 @@ import { dbNow } from "@/lib/domain/tx";
 import { requireFarmer } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { blankDraft, draftFromListing } from "../draft-server";
+import { splitItems } from "../listing-defaults";
 import { ListingForm } from "../listing-form";
 
 export const metadata: Metadata = { title: "新しく出品 | LocAI" };
@@ -53,7 +54,13 @@ async function Content({ searchParams }: { searchParams: PageProps<"/farm/listin
             : "市場などで売る分を除いた、このアプリ用の量だけを出品します。価格と数量は農家さんが決めます。"
         }
       />
-      <ListingForm mode={source ? "copy" : "new"} sourceId={source?.id} initial={initial} farmPrefecture={profile.prefecture} />
+      <ListingForm
+        mode={source ? "copy" : "new"}
+        sourceId={source?.id}
+        initial={initial}
+        farmPrefecture={profile.prefecture}
+        farmItems={splitItems(profile.mainItems)}
+      />
     </>
   );
 }

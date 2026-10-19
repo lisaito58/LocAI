@@ -53,7 +53,7 @@ async function Content({ params }: Pick<PageProps<"/inquiries/[id]">, "params">)
         <h1 className="mt-2 text-2xl font-bold text-leaf-dark">
           {itemEmoji(inquiry.listing.itemName)} {inquiry.listing.itemName} への相談
         </h1>
-        <p className="text-sm text-green-900/70">
+        <p className="text-sm text-gray-700">
           {isRestaurant ? `農家さん：${inquiry.listing.farmer.farmName}` : `お店：${inquiry.restaurant.shopName}`}
         </p>
       </div>
@@ -91,7 +91,7 @@ async function Content({ params }: Pick<PageProps<"/inquiries/[id]">, "params">)
             ✉️ 送信
           </ActionButton>
         ) : (
-          <p className="text-center text-sm text-green-900/60">この相談は{inquiry.status === "CONVERTED" ? "注文に進みました" : "終了しました"}。</p>
+          <p className="text-center text-sm text-gray-700">この相談は{inquiry.status === "CONVERTED" ? "注文に進みました" : "終了しました"}。</p>
         )}
       </section>
 

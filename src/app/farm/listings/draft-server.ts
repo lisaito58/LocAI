@@ -27,6 +27,8 @@ export function blankDraft(now: Date, prefecture: string, confirmHours: number):
     responseDeadlineAt: jstAt(now, 2, "12:00"),
     photoTakenOn: dateToJstDateText(now),
     deliveryOptions: [option],
+    earlySale: false,
+    saleTargetAt: "",
   };
 }
 

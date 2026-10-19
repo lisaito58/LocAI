@@ -12,7 +12,7 @@ export function PageTitle({ emoji, title, lead }: { emoji: string; title: string
         </span>
         {title}
       </h1>
-      {lead && <p className="mt-2 text-sm text-green-900/70">{lead}</p>}
+      {lead && <p className="mt-2 text-sm text-gray-700">{lead}</p>}
     </div>
   );
 }
@@ -34,7 +34,7 @@ export function Loading({ label = "読み込み中" }: { label?: string }) {
 
 export function EmptyState({ emoji = "🌱", children }: { emoji?: string; children: ReactNode }) {
   return (
-    <div className="card-soft flex flex-col items-center gap-2 py-10 text-center text-sm text-green-900/70">
+    <div className="card-soft flex flex-col items-center gap-2 py-10 text-center text-sm text-gray-700">
       <span className="text-4xl" aria-hidden>
         {emoji}
       </span>
@@ -82,7 +82,7 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
 export function Stat({ label, value, emoji, tone }: { label: string; value: string; emoji: string; tone?: string }) {
   return (
     <div className={`rounded-2xl px-3 py-2 ${tone ?? "bg-leaf-light"}`}>
-      <div className="text-xs text-green-900/70">
+      <div className="text-xs text-gray-700">
         <span aria-hidden>{emoji} </span>
         {label}
       </div>
@@ -112,4 +112,14 @@ const ITEM_EMOJI: [RegExp, string][] = [
 
 export function itemEmoji(name: string) {
   return ITEM_EMOJI.find(([re]) => re.test(name))?.[1] ?? "🥬";
+}
+
+// 検索結果0件などの「エラーではない」案内。赤や黄色の強い色を使わず、くすんだアプリコット色で落ち着いて示す
+export function CalmNotice({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div role="status" className="flex flex-col gap-3 rounded-3xl border border-[#e9d3c0] bg-[#fbf0e6] p-5 text-[#3d3a37]">
+      <p className="text-lg font-bold">{title}</p>
+      {children}
+    </div>
+  );
 }

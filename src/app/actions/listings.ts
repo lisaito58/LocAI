@@ -73,6 +73,9 @@ export async function editListing(listingId: string, _prev: ListingFormState, fo
     description: parsed.data.description,
     selfDeclaredFeatures: parsed.data.selfDeclaredFeatures,
     conditionNote: parsed.data.conditionNote,
+    // 「早めに販売したい」の欄があるフォームから送られたときだけ変更する（ほかの編集で勝手に外さない）
+    earlySale: formData.has("earlySaleSection") ? parsed.data.earlySale : undefined,
+    saleTargetAt: parsed.data.saleTargetAt,
   });
   if (!r.ok) return { error: r.error };
   refresh();
@@ -96,4 +99,37 @@ export async function approveAllAction(listingId: string): Promise<ActionResult>
   const failed = results.filter((r) => !r.ok).map((r) => `・${r.shopName}：${r.error}`);
   if (failed.length) return { ok: false, error: `${okCount}件を承認しました。承認できなかった注文：\n${failed.join("\n")}` };
   return { ok: true, message: `${okCount}件を承認しました` };
+}
+
+// 販売条件の見直し（単価・早めに販売したい）。値下げは任意で、自動では行わない。
+// 変更は新しい申し込みにだけ使う（既存の購入希望・確定注文は申込時の条件のまま）。
+const reviewSchema = z.object({
+  unitPriceYenPerKg: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.coerce.number("単価を数字で入力してください").int("単価は円の整数で入力してください").min(1, "単価は1円以上にしてください").max(100_000, "単価は100,000円以下にしてください"),
+  ),
+  earlySale: z.preprocess((v) => v === "on", z.boolean()),
+  saleTargetAt: z.string().optional(),
+});
+
+export async function reviewSalesTermsAction(listingId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser("FARMER");
+  if (!(await allowAction(user.id, "listing-write", 10, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
+  const parsed = reviewSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const current = await prisma.listing.findFirst({ where: { id: listingId, farmer: { userId: user.id } } });
+  if (!current) return { ok: false, error: "出品が見つかりません" };
+  const r = await updateListing(prisma, {
+    farmerUserId: user.id,
+    listingId,
+    unitPriceYenPerKg: parsed.data.unitPriceYenPerKg,
+    totalGrams: current.totalGrams,
+    description: current.description ?? undefined,
+    selfDeclaredFeatures: current.selfDeclaredFeatures ?? undefined,
+    conditionNote: current.conditionNote ?? undefined,
+    earlySale: parsed.data.earlySale,
+    saleTargetAt: parsed.data.saleTargetAt,
+  });
+  refresh();
+  return r.ok ? { ok: true, message: "販売条件を更新しました。新しい申し込みから使われます" } : r;
 }

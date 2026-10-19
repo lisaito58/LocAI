@@ -25,14 +25,15 @@ enum Role {
 }
 
 model User {
-  id            String   @id
+  id            String    @id
   name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
+  email         String    @unique
+  emailVerified Boolean   @default(false)
   image         String?
   role          Role
-  createdAt     DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+  onboardedAt   DateTime? @db.Timestamptz(3) // 初回の使い方案内を完了・スキップした時刻（毎回表示しないため）
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
 
   sessions          Session[]
   accounts          Account[]
@@ -111,6 +112,7 @@ model RestaurantProfile {
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders    Order[]
   inquiries ListingInquiry[]
+  reviews   Review[]
 }
 
 model FarmerProfile {
@@ -135,6 +137,7 @@ model FarmerProfile {
   listings  Listing[]
   orders    Order[]
   costMemos CostMemo[]
+  reviews   Review[]
 }
 
 // ============================================================
@@ -158,6 +161,8 @@ model Listing {
   selfDeclaredFeatures String? // 自己申告の特徴（その旨を表示する）
   sizeLabel            String? // 大きさ（小さめ／中くらい／大きめ／混在）
   conditionNote        String? // 形・傷などの状態と補足
+  earlySale            Boolean       @default(false) // 早めに販売したい（農家の販売上の希望。消費期限ではない）
+  saleTargetAt         DateTime?     @db.Timestamptz(3) // 販売希望期限：この日時までに販売確定させたい（受付・回答・受け渡し期限は変えない）
   unitPriceYenPerKg    Int
   totalGrams           Int // 出品総量（アプリ用在庫）
   soldGrams            Int           @default(0) // 販売確定量
@@ -345,6 +350,12 @@ model Order {
   needsDiscussionBy String?
   needsDiscussionAt DateTime? @db.Timestamptz(3)
 
+  // --- 販売確定時の連絡先（あとで住所を編集しても、確定した注文の届け先は変えない） ---
+  snapRestaurantAddress String?
+  snapRestaurantPhone   String?
+  snapFarmerAddress     String?
+  snapFarmerPhone       String?
+
   createdAt DateTime  @default(now()) @db.Timestamptz(3)
   decidedAt DateTime? @db.Timestamptz(3) // 終端状態になった時刻
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)
@@ -361,6 +372,7 @@ model Order {
   corrections     RecordCorrection[]
   costMemos       CostMemo[]
   backupInquiries ListingInquiry[]     @relation("PrimaryOrder")
+  review          Review?
   fromInquiry     ListingInquiry?      @relation("ConvertedOrder")
 
   @@unique([restaurantId, idempotencyKey])
@@ -550,4 +562,63 @@ model RateLimit {
   key         String   @id
   windowStart DateTime @db.Timestamptz(3)
   count       Int
+}
+
+// ============================================================
+// 簡易レビュー（受取済みの注文につき1件。店だけが投稿でき、農家は返信できる）
+// 点数・件数は並び順に使わない。削除は誰もできない（通報は運営が確認する）。
+// ============================================================
+
+enum ReviewRating {
+  GOOD // よかった
+  CONCERN // 気になる点があった
+}
+
+model Review {
+  id           String       @id @default(cuid())
+  orderId      String       @unique // 1注文につき1レビュー（DBで重複を防ぐ）
+  restaurantId String
+  farmerId     String
+  rating       ReviewRating
+  tags         String[] // 説明どおりの野菜／丁寧なやり取り／受け渡しがスムーズ
+  comment      String?      @db.VarChar(200)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
+
+  order      Order             @relation(fields: [orderId], references: [id])
+  restaurant RestaurantProfile @relation(fields: [restaurantId], references: [id])
+  farmer     FarmerProfile     @relation(fields: [farmerId], references: [id])
+  reply      ReviewReply?
+  reports    ReviewReport[]
+
+  @@index([farmerId, createdAt])
+}
+
+model ReviewReply {
+  id        String   @id @default(cuid())
+  reviewId  String   @unique
+  body      String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  review Review @relation(fields: [reviewId], references: [id])
+}
+
+enum ReportStatus {
+  OPEN // 未確認
+  REVIEWED // 運営が確認済み
+}
+
+// 通報だけでは自動削除しない。運営は npm run reports:list で確認する
+model ReviewReport {
+  id         String       @id @default(cuid())
+  reviewId   String
+  reporterId String
+  reason     String       @db.VarChar(200)
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+
+  review Review @relation(fields: [reviewId], references: [id])
+
+  @@unique([reviewId, reporterId])
+  @@index([status, createdAt])
 }

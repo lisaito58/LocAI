@@ -8,12 +8,12 @@ import { formatDateOnly, formatJst, formatKg, formatYen } from "@/lib/domain/uni
 import { requireRestaurant } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 
-export const metadata: Metadata = { title: "マイページ | LocAI" };
+export const metadata: Metadata = { title: "注文 | LocAI" };
 
 export default function ShopOrdersPage() {
   return (
     <Page>
-      <PageTitle emoji="🧺" title="マイページ" lead="確保できた食材（販売確定）と、まだ確定していない購入希望を分けて表示します。" />
+      <PageTitle emoji="🧺" title="注文" lead="対応が必要な注文、農家さんの回答待ち、使用日別の確保済み食材を分けて表示します。" />
       <Suspense fallback={<Loading />}>
         <Content />
       </Suspense>
@@ -44,7 +44,13 @@ async function Content() {
   });
 
   const confirmed = orders.filter((o) => o.status === "CONFIRMED");
-  const waiting = orders.filter((o) => o.status === "AWAITING_RESPONSE" || o.status === "AWAITING_REAGREEMENT");
+  const reagree = orders.filter((o) => o.status === "AWAITING_REAGREEMENT");
+  const waiting = orders.filter((o) => o.status === "AWAITING_RESPONSE");
+  const now = new Date();
+  const payNeeded = confirmed.filter((o) => o.payment?.status === "AWAITING_PAYMENT");
+  const receiveNeeded = confirmed.filter(
+    (o) => o.fulfillment && !o.fulfillment.buyerReceivedAt && (o.fulfillment.farmerSentAt || o.snapScheduleStartsAt <= now),
+  );
   const ended = orders.filter((o) => ["DECLINED", "CANCELLED", "EXPIRED"].includes(o.status));
 
   // 使用日ごとにまとめる（献立の検討用）
@@ -56,8 +62,52 @@ async function Content() {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <h2 className="section-title">⏳ まだ確定していない購入希望（確保済みではありません）</h2>
+      {reagree.length > 0 && (
+        <section id="reagreement" className="flex scroll-mt-24 flex-col gap-3">
+          <h2 className="section-title">📝 条件変更の確認・再同意が必要</h2>
+          {reagree.map((o) => (
+            <Link key={o.id} href={`/orders/${o.id}`} className="card flex flex-wrap items-center gap-2 border-2 border-amber-300 p-4">
+              <StatusBadge status={o.status} />
+              <span className="font-bold">
+                {itemEmoji(o.snapItemName)} {o.snapItemName}
+              </span>
+              <span className="text-sm">👩‍🌾 {o.farmer.farmName}</span>
+              <span className="ml-auto text-sm font-bold text-amber-800">⏰ {formatJst(o.deadlineAt)}までに確認</span>
+            </Link>
+          ))}
+        </section>
+      )}
+      {payNeeded.length > 0 && (
+        <section id="payment" className="flex scroll-mt-24 flex-col gap-3">
+          <h2 className="section-title">💴 支払いが必要（アプリ外で支払い、申告する）</h2>
+          {payNeeded.map((o) => (
+            <Link key={o.id} href={`/orders/${o.id}`} className="card flex flex-wrap items-center gap-2 border-2 border-amber-300 p-4">
+              <span className="font-bold">
+                {itemEmoji(o.snapItemName)} {o.snapItemName} {formatYen(o.totalYen)}
+              </span>
+              <span className="text-sm">👩‍🌾 {o.farmer.farmName}</span>
+              <span className="ml-auto text-sm font-bold text-amber-800">支払期限 {formatJst(o.snapPaymentDeadlineAt)}</span>
+            </Link>
+          ))}
+        </section>
+      )}
+      {receiveNeeded.length > 0 && (
+        <section id="receive" className="flex scroll-mt-24 flex-col gap-3">
+          <h2 className="section-title">📦 受け取りの確認が必要</h2>
+          {receiveNeeded.map((o) => (
+            <Link key={o.id} href={`/orders/${o.id}`} className="card flex flex-wrap items-center gap-2 border-2 border-amber-300 p-4">
+              <span className="font-bold">
+                {itemEmoji(o.snapItemName)} {o.snapItemName} {formatKg(o.quantityGrams)}
+              </span>
+              <span className="text-sm">{o.fulfillment?.farmerSentAt ? "🚚 農家さんが発送・引き渡しを記録" : "📅 受け渡し予定を過ぎています"}</span>
+              <span className="ml-auto text-sm">受け取ったら記録してください</span>
+            </Link>
+          ))}
+        </section>
+      )}
+
+      <section id="awaiting" className="flex scroll-mt-24 flex-col gap-3">
+        <h2 className="section-title">⏳ 農家さんの回答待ち（まだ確保できていません）</h2>
         {waiting.length === 0 ? (
           <EmptyState emoji="🕊️">回答待ちの購入希望はありません。</EmptyState>
         ) : (
@@ -67,16 +117,15 @@ async function Content() {
               <span className="font-bold">
                 {itemEmoji(o.snapItemName)} {o.snapItemName} {formatKg(o.quantityGrams)}
               </span>
-              <span className="text-sm text-green-900/70">👩‍🌾 {o.farmer.farmName}</span>
+              <span className="text-sm text-gray-700">👩‍🌾 {o.farmer.farmName}</span>
               <span className="text-sm">{formatYen(o.changeProposal && !o.changeProposal.respondedAt ? o.changeProposal.newTotalYen : o.totalYen)}</span>
-              <span className="ml-auto text-sm font-bold text-amber-700">⏰ {formatJst(o.deadlineAt)}まで</span>
-              {o.status === "AWAITING_REAGREEMENT" && <span className="w-full text-sm text-orange-700">📝 農家さんから条件変更が届いています。確認して再同意してください。</span>}
+              <span className="ml-auto text-sm font-bold text-amber-800">⏰ {formatJst(o.deadlineAt)}までに回答がなければ解除</span>
             </Link>
           ))
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section id="secured" className="flex scroll-mt-24 flex-col gap-3">
         <h2 className="section-title">🍽️ 使用日別の確保済み食材（販売確定）</h2>
         {byUseDate.size === 0 ? (
           <EmptyState emoji="🥕">まだ販売確定した食材はありません。</EmptyState>
@@ -105,7 +154,7 @@ async function Content() {
       <section className="flex flex-col gap-3">
         <h2 className="section-title">💬 出品への相談（仮押さえなし）</h2>
         {inquiries.length === 0 ? (
-          <p className="text-sm text-green-900/60">相談はまだありません。</p>
+          <p className="text-sm text-gray-700">相談はまだありません。</p>
         ) : (
           inquiries.map((q) => (
             <Link key={q.id} href={`/inquiries/${q.id}`} className="card-soft flex flex-wrap items-center gap-2 p-3 text-sm hover:bg-leaf-light">

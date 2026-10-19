@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { EmptyState, itemEmoji, Loading, Notice, Page, PageTitle, StatusBadge } from "@/components/ui";
 import { expireDueOrders } from "@/lib/domain/orders";
+import { jstDayRange } from "@/lib/domain/todo";
 import { dbNow } from "@/lib/domain/tx";
 import { formatJst, formatKg, formatYen } from "@/lib/domain/units";
 import { requireFarmer } from "@/lib/guard";
@@ -37,15 +38,18 @@ async function Content() {
     orderBy: { deadlineAt: "asc" },
     include: { restaurant: { select: { shopName: true, city: true } }, payment: true, fulfillment: true },
   });
-  const waiting = orders.filter((o) => o.status !== "CONFIRMED");
+  // 農家が回答するのは「回答待ち」だけ。「条件変更の確認待ち」は店の再同意を待っている
+  const waiting = orders.filter((o) => o.status === "AWAITING_RESPONSE");
+  const reagreement = orders.filter((o) => o.status === "AWAITING_REAGREEMENT");
+  const { end: todayEnd } = jstDayRange(now);
   const confirmed = orders.filter((o) => o.status === "CONFIRMED");
   const paymentQueue = confirmed.filter((o) => o.payment?.status === "BUYER_REPORTED");
   const toShip = confirmed.filter((o) => !o.fulfillment?.farmerSentAt);
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <h2 className="section-title">⏳ 回答が必要</h2>
+      <section id="awaiting" className="flex scroll-mt-24 flex-col gap-3">
+        <h2 className="section-title">⏳ 回答が必要（回答待ちの購入希望）</h2>
         {waiting.length === 0 ? (
           <EmptyState emoji="📭">回答が必要な購入希望はありません。</EmptyState>
         ) : (
@@ -60,16 +64,30 @@ async function Content() {
               </span>
               <span className="text-sm">🏮 {o.restaurant.shopName}（{o.restaurant.city}）</span>
               <span className="text-sm">{formatYen(o.totalYen)}</span>
-              <span className="ml-auto text-sm font-bold text-amber-700">⏰ {formatJst(o.deadlineAt)}まで</span>
+              <span className="ml-auto text-sm font-bold text-amber-800">
+                {o.deadlineAt < todayEnd && <span className="badge mr-1 bg-red-100 text-red-800">今日が期限</span>}⏰ {formatJst(o.deadlineAt)}まで
+              </span>
             </Link>
           ))
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
+      {reagreement.length > 0 && (
+        <section id="reagreement" className="flex scroll-mt-24 flex-col gap-3">
+          <h2 className="section-title">📝 お店の再同意待ち（あなたの対応は不要）</h2>
+          {reagreement.map((o) => (
+            <Link key={o.id} href={`/orders/${o.id}`} className="card-soft flex flex-wrap items-center gap-2 p-3 text-sm hover:bg-leaf-light">
+              <StatusBadge status={o.status} /> 🏮 {o.restaurant.shopName} ・ {o.snapItemName}
+              <span className="ml-auto">⏰ {formatJst(o.deadlineAt)}まで</span>
+            </Link>
+          ))}
+        </section>
+      )}
+
+      <section id="payment" className="flex scroll-mt-24 flex-col gap-3">
         <h2 className="section-title">💴 入金の確認待ち（店が支払いを申告済み）</h2>
         {paymentQueue.length === 0 ? (
-          <p className="text-sm text-green-900/60">確認待ちはありません。</p>
+          <p className="text-sm text-gray-700">確認待ちはありません。</p>
         ) : (
           paymentQueue.map((o) => {
             const due = new Date(o.payment!.firstReportedAt!.getTime() + o.snapPaymentConfirmGuideHours * 3_600_000);
@@ -86,13 +104,14 @@ async function Content() {
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="section-title">🚚 発送・引き渡しの予定</h2>
+      <section id="handover" className="flex scroll-mt-24 flex-col gap-3">
+        <h2 className="section-title">🚚 発送・引き渡しの予定（未記録のもの）</h2>
         {toShip.length === 0 ? (
-          <p className="text-sm text-green-900/60">予定はありません。</p>
+          <p className="text-sm text-gray-700">予定はありません。</p>
         ) : (
           toShip.map((o) => (
             <Link key={o.id} href={`/orders/${o.id}`} className="card-soft flex flex-wrap items-center gap-2 p-3 text-sm hover:bg-leaf-light">
+              {o.snapScheduleStartsAt < todayEnd && <span className="badge bg-amber-100 text-amber-900">{o.snapScheduleStartsAt < now ? "予定を過ぎています" : "今日"}</span>}
               📅 {formatJst(o.snapScheduleStartsAt)} ・ 🏮 {o.restaurant.shopName} ・ {o.snapItemName} {formatKg(o.quantityGrams)}
               {o.needsDiscussion && <span className="badge bg-red-100 text-red-700">🚩 要相談</span>}
             </Link>

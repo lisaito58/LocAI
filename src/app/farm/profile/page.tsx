@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
+import { LogoutButton } from "@/components/logout-button";
 import { Loading, Page, PageTitle } from "@/components/ui";
 import { requireFarmer } from "@/lib/guard";
 import { FarmerProfileForm } from "./profile-form";
@@ -24,22 +26,40 @@ export default function FarmProfilePage() {
 async function Content() {
   const { profile } = await requireFarmer();
   return (
-    <FarmerProfileForm
-      initial={
-        profile && {
-          farmName: profile.farmName,
-          prefecture: profile.prefecture,
-          city: profile.city,
-          addressLine: profile.addressLine,
-          contactPhone: profile.contactPhone,
-          mainItems: profile.mainItems ?? "",
-          commitment: profile.commitment ?? "",
-          introduction: profile.introduction ?? "",
-          responseGuide: profile.responseGuide ?? "",
-          availableWeekdays: profile.availableWeekdays?.split("・") ?? [],
-          paymentConfirmGuideHours: profile.paymentConfirmGuideHours ?? 24,
+    <div className="flex flex-col gap-6">
+      <FarmerProfileForm
+        initial={
+          profile && {
+            farmName: profile.farmName,
+            prefecture: profile.prefecture,
+            city: profile.city,
+            addressLine: profile.addressLine,
+            contactPhone: profile.contactPhone,
+            mainItems: profile.mainItems ?? "",
+            commitment: profile.commitment ?? "",
+            introduction: profile.introduction ?? "",
+            responseGuide: profile.responseGuide ?? "",
+            availableWeekdays: profile.availableWeekdays?.split("・") ?? [],
+            paymentConfirmGuideHours: profile.paymentConfirmGuideHours ?? 24,
+          }
         }
-      }
-    />
+      />
+      <section className="card-soft flex flex-col gap-2">
+        <h2 className="section-title">🔗 そのほか</h2>
+        <Link href="/farm/simulator" className="btn-secondary justify-start">
+          🧮 受取額の試算
+        </Link>
+        <Link href="/farm/reviews" className="btn-secondary justify-start">
+          ✍️ あなたへの取引レビュー
+        </Link>
+        <Link href="/guide" className="btn-secondary justify-start">
+          📖 使い方を見る
+        </Link>
+      </section>
+      {/* ログアウトは保存ボタンから離して、いちばん下に置く */}
+      <section className="mt-10 border-t-2 border-dashed border-green-200 pt-8">
+        <LogoutButton />
+      </section>
+    </div>
   );
 }

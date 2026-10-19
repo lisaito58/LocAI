@@ -1,49 +1,45 @@
 import Link from "next/link";
-import { LogoutButton } from "@/components/logout-button";
+import { AppNav } from "@/components/app-nav";
+import { TextSizeToggle } from "@/components/text-size-toggle";
+import { farmerBadge, getFarmerTodo, getShopTodo, shopBadge } from "@/lib/domain/todo";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-
-const NAV = {
-  RESTAURANT: [
-    { href: "/shop/search", label: "🔍 野菜をさがす" },
-    { href: "/shop/orders", label: "🧺 マイページ" },
-    { href: "/shop/profile", label: "🏮 店舗情報" },
-  ],
-  FARMER: [
-    { href: "/farm", label: "🌾 出品一覧" },
-    { href: "/farm/orders", label: "📬 届いた注文" },
-    { href: "/farm/simulator", label: "🧮 受取額の試算" },
-    { href: "/farm/profile", label: "👩‍🌾 農園情報" },
-  ],
-} as const;
 
 export async function SiteHeader() {
   const user = await getCurrentUser();
+  let badge: number | null = null;
+  if (user) {
+    // バッジの件数が取れなくても、メニュー自体は表示する
+    try {
+      const now = new Date();
+      if (user.role === "FARMER") {
+        const p = await prisma.farmerProfile.findUnique({ where: { userId: user.id }, select: { id: true } });
+        if (p) badge = farmerBadge(await getFarmerTodo(prisma, p.id, now));
+      } else {
+        const p = await prisma.restaurantProfile.findUnique({ where: { userId: user.id }, select: { id: true } });
+        if (p) badge = shopBadge(await getShopTodo(prisma, p.id, now));
+      }
+    } catch {
+      badge = null;
+    }
+  }
   return (
-    <header className="sticky top-0 z-20 border-b border-green-100 bg-white/85 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-5xl items-center gap-3 px-4">
-        <Link href="/" className="flex shrink-0 items-center gap-1.5 text-xl font-bold text-leaf-dark">
+    <header className="sticky top-0 z-20 border-b border-green-100 bg-white">
+      <div className="mx-auto flex min-h-16 max-w-5xl items-center gap-3 px-4 py-2">
+        <Link href={user ? (user.role === "FARMER" ? "/farm" : "/shop") : "/"} className="flex shrink-0 items-center gap-1.5 text-xl font-bold text-leaf-dark">
           <span className="text-2xl" aria-hidden>
             🥬
           </span>
           LocAI
         </Link>
-        {user ? (
-          <>
-            <nav className="-mx-1 flex flex-1 gap-1 overflow-x-auto px-1 text-sm whitespace-nowrap">
-              {NAV[user.role].map((n) => (
-                <Link key={n.href} href={n.href} className="rounded-full px-3 py-1.5 font-bold text-leaf-dark hover:bg-leaf-light">
-                  {n.label}
-                </Link>
-              ))}
-            </nav>
-            <LogoutButton />
-          </>
-        ) : (
-          <nav className="ml-auto flex gap-2 text-sm">
+        {user ? <AppNav role={user.role} badge={badge} /> : <span className="flex-1" />}
+        <TextSizeToggle />
+        {!user && (
+          <nav className="flex gap-2 text-sm">
             <Link href="/login" className="btn-secondary btn-sm">
               ログイン
             </Link>
-            <Link href="/signup" className="btn-primary btn-sm">
+            <Link href="/signup" className="btn-primary btn-sm max-sm:hidden">
               新規登録
             </Link>
           </nav>

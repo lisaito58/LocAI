@@ -4,6 +4,9 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { openInquiryAction } from "@/app/actions/orders";
 import { ActionButton } from "@/components/action-button";
+import { ReqMark } from "@/components/fields";
+import { ReviewList } from "@/components/reviews";
+import { getFarmerReviews } from "@/lib/domain/reviews";
 import { itemEmoji, Loading, Notice, Page } from "@/components/ui";
 import { expireDueOrders, quoteOrder } from "@/lib/domain/orders";
 import { dbNow } from "@/lib/domain/tx";
@@ -129,7 +132,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             )}
           </div>
           {currentPhotos[0] && (
-            <p className="text-center text-xs text-green-900/60">📷 農家さんが撮影した実物写真（撮影日 {formatDateOnly(currentPhotos[0].takenOn)}）</p>
+            <p className="text-center text-xs text-gray-700">📷 農家さんが撮影した実物写真（撮影日 {formatDateOnly(currentPhotos[0].takenOn)}）</p>
           )}
         </div>
         <div className="flex flex-1 flex-col gap-2">
@@ -148,6 +151,11 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             {listing.sizeLabel && <Info label="大きさ" value={listing.sizeLabel} />}
             {listing.conditionNote && <Info label="状態" value={listing.conditionNote} />}
           </div>
+          {listing.earlySale && listing.saleTargetAt && listing.saleTargetAt > now && (
+            <p className="rounded-2xl bg-orange-50 px-3 py-2 text-sm text-orange-950">
+              ⏳ 農家さんは {formatJst(listing.saleTargetAt)} までに販売を決めたいと希望しています（早く届くという意味ではありません。受け渡し日は下の日程で確認してください）。
+            </p>
+          )}
           {listing.description && <p className="text-sm whitespace-pre-wrap">{listing.description}</p>}
           {listing.selfDeclaredFeatures && (
             <p className="rounded-2xl bg-leaf-light/60 px-3 py-2 text-sm">
@@ -164,12 +172,17 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
           {listing.farmer.mainItems && <p className="mt-1">主な品目：{listing.farmer.mainItems}</p>}
           {listing.farmer.commitment && <p className="mt-1">こだわり（自己申告）：{listing.farmer.commitment}</p>}
           {listing.farmer.introduction && <p className="mt-2 whitespace-pre-wrap">{listing.farmer.introduction}</p>}
-          <p className="mt-2 text-xs text-green-900/60">
+          <p className="mt-2 text-xs text-gray-700">
             回答の目安：{listing.farmer.responseGuide ?? "未設定"}
             {listing.farmer.availableWeekdays && ` ・ 対応曜日：${listing.farmer.availableWeekdays}`}（参考。回答を保証するものではありません）
           </p>
         </section>
       )}
+
+      <section className="card-soft flex flex-col gap-3">
+        <h2 className="section-title">✍️ {listing.farmer.farmName} の取引レビュー</h2>
+        <ReviewList summary={await getFarmerReviews(prisma, listing.farmerId, 5)} />
+      </section>
 
       <section className="card flex flex-col gap-3">
         <h2 className="section-title">🚚 受け渡し・支払いの条件</h2>
@@ -205,6 +218,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
           <Notice tone="warn">この出品はいま新しい申込を受け付けていません。</Notice>
         ) : (
           <>
+            <p className="hint">申し込む前に、下の条件をすべて入れて「合計と期限を確認する」を押してください。</p>
             <form className="grid gap-3 sm:grid-cols-2" action={`/shop/listings/${listing.id}#order`}>
               {Object.entries(q)
                 .filter(([k]) => !["purchaseKg", "purchase", "budget", "use", "by", "choice"].includes(k))
@@ -281,7 +295,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         <p className="rounded-2xl bg-white px-3 py-2 text-sm font-bold text-amber-800">
           ⚠️ 購入希望ではなく、数量は確保されません（仮押さえなし）。
         </p>
-        <p className="text-xs text-green-900/70">
+        <p className="text-xs text-gray-700">
           第一候補の注文が成立しなかったときの「予備」として相談できます。第一候補が回答待ち・確定の間は、予備から注文に進めません。複数の農家さんから実際に買う場合は、別の購入予定として通常どおり申し込んでください。
         </p>
         <ActionButton
@@ -314,16 +328,20 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
 function Info({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="rounded-xl bg-white px-3 py-1.5">
-      <div className="text-xs text-green-900/60">{label}</div>
+      <div className="text-xs text-gray-700">{label}</div>
       <div className={strong ? "text-xl font-bold text-leaf-dark" : "font-bold"}>{value}</div>
     </div>
   );
 }
 
+// 申し込み前に必要な条件なので「必須」と表示する（一覧の閲覧では任意）
 function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="label">{label}</span>
+      <span className="label">
+        {label}
+        <ReqMark required />
+      </span>
       {children}
     </label>
   );

@@ -322,6 +322,23 @@ async function confirmSale(tx: Tx, orderId: string, listingId: string, heldGrams
   });
   await tx.paymentRecord.create({ data: { orderId } });
   await tx.fulfillmentRecord.create({ data: { orderId } });
+  // 確定した時点の届け先・連絡先を注文に保存する（あとでプロフィールを編集しても変えない）
+  const o = await tx.order.findUniqueOrThrow({
+    where: { id: orderId },
+    select: {
+      restaurant: { select: { prefecture: true, city: true, addressLine: true, contactPhone: true } },
+      farmer: { select: { prefecture: true, city: true, addressLine: true, contactPhone: true } },
+    },
+  });
+  await tx.order.update({
+    where: { id: orderId },
+    data: {
+      snapRestaurantAddress: `${o.restaurant.prefecture}${o.restaurant.city}${o.restaurant.addressLine}`,
+      snapRestaurantPhone: o.restaurant.contactPhone,
+      snapFarmerAddress: `${o.farmer.prefecture}${o.farmer.city}${o.farmer.addressLine}`,
+      snapFarmerPhone: o.farmer.contactPhone,
+    },
+  });
 }
 
 export async function approveOrder(
