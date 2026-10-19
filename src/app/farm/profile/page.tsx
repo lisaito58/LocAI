@@ -49,6 +49,9 @@ async function Content() {
         <Link href="/farm/simulator" className="btn-secondary justify-start">
           🧮 受取額の試算
         </Link>
+        <Link href="/farm/reviews" className="btn-secondary justify-start">
+          ✍️ あなたへの取引レビュー
+        </Link>
         <Link href="/guide" className="btn-secondary justify-start">
           📖 使い方を見る
         </Link>

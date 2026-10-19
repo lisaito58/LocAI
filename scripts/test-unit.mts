@@ -92,3 +92,35 @@ test("公平な並び：同じシードなら同じ順、同じ農家が続か�
   const others = ["s2", "s3", "s4", "s5"].map((s) => fairOrder(items, s).map((i) => i.id).join());
   assert.ok(others.some((o) => o !== x.join()));
 });
+
+import { isValidCity } from "../src/lib/data/municipalities";
+import { checkPhone } from "../src/lib/validation/phone";
+
+test("電話番号：整形してから原因別に案内する", () => {
+  const ok = (s: string) => checkPhone(s);
+  assert.deepEqual(ok("06-1234-5678"), { ok: true, value: "06-1234-5678" });
+  assert.deepEqual(ok("０９０－１２３４－５６７８"), { ok: true, value: "090-1234-5678" }); // 全角
+  assert.deepEqual(ok(" 0612345678 "), { ok: true, value: "0612345678" }); // 前後の空白
+  assert.deepEqual(ok("090 1234 5678"), { ok: true, value: "090-1234-5678" }); // 空白区切り
+  assert.deepEqual(ok("06(1234)5678"), { ok: true, value: "06-1234-5678" }); // かっこ
+  assert.ok(ok("0120-123-456").ok);
+  const msg = (s: string) => {
+    const r = checkPhone(s);
+    return r.ok ? "" : r.message;
+  };
+  assert.match(msg(""), /入力してください/);
+  assert.match(msg("06-1234-abcd"), /文字や記号は使えません/);
+  assert.match(msg("+81-90-1234-5678"), /国際電話/);
+  assert.match(msg("6-1234-5678"), /0から/);
+  assert.match(msg("06-1234-567"), /桁数/); // 9桁
+  assert.match(msg("06-1234-56789"), /桁数/); // 11桁だが携帯ではない
+  assert.match(msg("0000000000"), /桁数/);
+});
+
+test("市区町村：都道府県との組み合わせを検証", () => {
+  assert.ok(isValidCity("大阪府", "大阪市福島区"));
+  assert.ok(isValidCity("大阪府", "豊能郡能勢町"));
+  assert.ok(!isValidCity("大阪府", "能勢町")); // 郡名なしは一覧にない表記
+  assert.ok(!isValidCity("京都府", "大阪市福島区")); // 別の都道府県
+  assert.ok(!isValidCity("存在しない県", "南丹市"));
+});

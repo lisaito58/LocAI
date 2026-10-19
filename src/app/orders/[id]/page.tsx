@@ -17,6 +17,7 @@ import {
   reportPaymentAction,
 } from "@/app/actions/orders";
 import { ActionButton } from "@/components/action-button";
+import { ReviewForm } from "@/components/reviews";
 import { itemEmoji, Loading, Notice, Page, StatusBadge } from "@/components/ui";
 import { estimateReceipt } from "@/lib/domain/estimate";
 import { PAYMENT_STATUS_LABELS } from "@/lib/domain/order-labels";
@@ -66,6 +67,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
       events: { orderBy: { createdAt: "asc" } },
       corrections: { orderBy: { createdAt: "asc" } },
       costMemos: { where: { kind: "ACTUAL" } },
+      review: { include: { reply: true } },
       scheduleSlot: { select: { deliveryOptionId: true } },
     },
   });
@@ -395,6 +397,39 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
             </section>
           )}
         </>
+      )}
+
+      {/* 取引レビュー（受取済みの注文だけ。未着などの問題は相談欄・要相談から） */}
+      {confirmed && (
+        <section className="card flex flex-col gap-3">
+          <h2 className="section-title">✍️ 取引レビュー</h2>
+          {order.review ? (
+            <div className="rounded-2xl bg-leaf-light/50 p-3">
+              <p className="font-bold">
+                {order.review.rating === "GOOD" ? "😊 よかった" : "🤔 気になる点があった"}
+                {order.review.tags.length > 0 && <span className="ml-2 text-sm font-normal">✔ {order.review.tags.join("・")}</span>}
+              </p>
+              {order.review.comment && <p className="mt-1 whitespace-pre-wrap">{order.review.comment}</p>}
+              {order.review.reply && <p className="mt-2 text-sm">👩‍🌾 返信：{order.review.reply.body}</p>}
+              {isFarmer && (
+                <Link href="/farm/reviews" className="link mt-2 inline-block text-sm">
+                  レビューに返信する →
+                </Link>
+              )}
+            </div>
+          ) : isFarmer ? (
+            <p className="text-gray-700">お店が受け取りを記録すると、レビューが投稿されることがあります。</p>
+          ) : order.fulfillment?.buyerReceivedAt ? (
+            <ReviewForm orderId={order.id} />
+          ) : (
+            <p className="text-gray-700">受け取りを記録すると、レビューを書けます。</p>
+          )}
+          {!isFarmer && (
+            <p className="rounded-2xl bg-white px-3 py-2 text-sm ring-1 ring-green-100">
+              届かない・内容が違うなどの問題はレビューの対象外です。下の相談欄で農家さんに連絡し、必要なら「要相談」の目印を付けてください。
+            </p>
+          )}
+        </section>
       )}
 
       {/* 相談（注文スレッド） */}

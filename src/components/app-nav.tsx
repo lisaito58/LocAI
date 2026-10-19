@@ -20,7 +20,7 @@ export function AppNav({ role, badge }: { role: "FARMER" | "RESTAURANT"; badge: 
             badgeLabel: "対応が必要な注文（回答待ち＋入金確認待ち）",
             match: (p) => p.startsWith("/farm/orders") || p.startsWith("/orders") || p.startsWith("/inquiries"),
           },
-          { href: "/farm/profile", label: "農園情報", emoji: "👩‍🌾", match: (p) => p.startsWith("/farm/profile") || p.startsWith("/farm/simulator") },
+          { href: "/farm/profile", label: "農園情報", emoji: "👩‍🌾", match: (p) => p.startsWith("/farm/profile") || p.startsWith("/farm/simulator") || p.startsWith("/farm/reviews") },
         ]
       : [
           { href: "/shop", label: "ホーム", emoji: "🏡", match: (p) => p === "/shop" },
