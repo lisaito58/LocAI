@@ -13,7 +13,8 @@
     "test:unit": "tsx --test scripts/test-unit.mts",
     "test:integration": "tsx --conditions=react-server scripts/test-integration.mts",
     "seed:demo": "tsx --conditions=react-server scripts/seed-demo.mts",
-    "seed:test": "tsx --conditions=react-server scripts/seed-test-accounts.mts"
+    "seed:test": "tsx --conditions=react-server scripts/seed-test-accounts.mts",
+    "migrate:https": "tsx --conditions=react-server scripts/migrate-over-https.mts"
   },
   "dependencies": {
     "@google/genai": "2.24.0",

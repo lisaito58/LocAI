@@ -385,6 +385,9 @@ try {
   const users = await prisma.user.findMany({ where: { id: { startsWith: `${RUN}-` } }, select: { id: true } });
   const ids = users.map((u) => u.id);
   await prisma.listingInquiry.deleteMany({ where: { restaurant: { userId: { in: ids } } } });
+  await prisma.reviewReport.deleteMany({ where: { review: { restaurant: { userId: { in: ids } } } } });
+  await prisma.reviewReply.deleteMany({ where: { review: { restaurant: { userId: { in: ids } } } } });
+  await prisma.review.deleteMany({ where: { restaurant: { userId: { in: ids } } } });
   await prisma.order.deleteMany({ where: { restaurant: { userId: { in: ids } } } });
   await prisma.listing.deleteMany({ where: { farmer: { userId: { in: ids } } } });
   await prisma.rateLimit.deleteMany({ where: { key: { contains: RUN } } });
