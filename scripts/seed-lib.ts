@@ -30,8 +30,11 @@ export type FarmerSeed = {
     graceHours: number;
     pickup?: boolean; // 引き取り（受け渡し時払い・0円・件数上限あり）も用意する
     onHandoverShipping?: boolean; // 宅配を前払いでなく受け渡し時払いにする
+    saleTargetHours?: number; // 早めに販売したい：いまから何時間後を販売希望期限にするか
   }[];
 };
+
+export type ListingSeed = FarmerSeed["listings"][number];
 
 export type RestaurantSeed = {
   email: string;
@@ -55,7 +58,6 @@ export async function seedAccounts(opts: {
   restaurants: RestaurantSeed[];
 }) {
   const now = await dbNow(prisma);
-  const h = (hours: number) => new Date(now.getTime() + hours * 3_600_000);
   const passwordHash = await hashPassword(opts.password);
 
   async function createAccount(email: string, name: string, role: "FARMER" | "RESTAURANT", createdAt = now) {
@@ -80,55 +82,7 @@ export async function seedAccounts(opts: {
       data: { userId, ...f.profile, addressLine: "（架空の住所）1-2-3", contactPhone: "000-0000-0000", paymentConfirmGuideHours: 24 },
     });
     for (const l of f.listings) {
-      const listing = await prisma.listing.create({
-        data: {
-          farmerId: farmer.id,
-          status: "PUBLISHED",
-          itemName: l.itemName,
-          description: `${l.description}（${opts.dataLabel}：実物写真なし）`,
-          selfDeclaredFeatures: l.selfDeclaredFeatures ?? null,
-          sizeLabel: l.sizeLabel ?? null,
-          unitPriceYenPerKg: l.price,
-          totalGrams: Math.round(l.totalKg * 1000),
-          minOrderGrams: Math.round(l.minKg * 1000),
-          orderStepGrams: Math.round(l.stepKg * 1000),
-          responseGraceMinutes: l.graceHours * 60,
-          acceptDeadlineAt: h(24 * 4),
-          responseDeadlineAt: h(24 * 5),
-          publishedAt: now,
-        },
-      });
-      const shipping = await prisma.deliveryOption.create({
-        data: {
-          listingId: listing.id,
-          method: "SHIPPING",
-          paymentTiming: l.onHandoverShipping ? "ON_HANDOVER" : "PREPAID",
-          paymentMethod: l.onHandoverShipping ? "CASH" : "BANK_TRANSFER",
-          prepayDeadlineAt: l.onHandoverShipping ? null : h(24 * 5 + 6),
-          paymentConfirmGuideHours: 24,
-          shippingRates: { create: [...SHIPPING_BANDS("大阪府"), ...SHIPPING_BANDS("京都府")] },
-        },
-      });
-      await prisma.scheduleSlot.createMany({
-        data: [6, 7, 9].map((d) => ({ listingId: listing.id, deliveryOptionId: shipping.id, startsAt: h(24 * d) })),
-      });
-      if (l.pickup) {
-        const pickup = await prisma.deliveryOption.create({
-          data: {
-            listingId: listing.id,
-            method: "PICKUP",
-            paymentTiming: "ON_HANDOVER",
-            paymentMethod: "CASH",
-            paymentConfirmGuideHours: 24,
-            shippingRates: {
-              create: ["大阪府", "京都府"].map((p) => ({ prefecture: p, minGramsExclusive: 0, maxGramsInclusive: 1_000_000, feeYen: 0 })),
-            },
-          },
-        });
-        await prisma.scheduleSlot.createMany({
-          data: [6, 8].map((d) => ({ listingId: listing.id, deliveryOptionId: pickup.id, startsAt: h(24 * d + 2), capacity: 3 })),
-        });
-      }
+      await createSeedListing(farmer.id, l, opts.dataLabel, now);
       listingCount++;
     }
     console.log(`+ ${f.profile.farmName}（${f.email}）と出品${f.listings.length}件`);
@@ -148,4 +102,60 @@ export async function seedAccounts(opts: {
     console.log(`+ ${r.profile?.shopName ?? "（店舗情報なし）"}（${r.email}）`);
   }
   return { listingCount };
+}
+
+// 出品を1件作る（受付期限は4日後、回答の最終期限は5日後、日程は6・7・9日後）
+export async function createSeedListing(farmerId: string, l: ListingSeed, dataLabel: string, now: Date) {
+  const h = (hours: number) => new Date(now.getTime() + hours * 3_600_000);
+  const listing = await prisma.listing.create({
+    data: {
+      farmerId,
+      status: "PUBLISHED",
+      itemName: l.itemName,
+      description: `${l.description}（${dataLabel}：実物写真なし）`,
+      selfDeclaredFeatures: l.selfDeclaredFeatures ?? null,
+      sizeLabel: l.sizeLabel ?? null,
+      unitPriceYenPerKg: l.price,
+      totalGrams: Math.round(l.totalKg * 1000),
+      minOrderGrams: Math.round(l.minKg * 1000),
+      orderStepGrams: Math.round(l.stepKg * 1000),
+      responseGraceMinutes: l.graceHours * 60,
+      acceptDeadlineAt: h(24 * 4),
+      responseDeadlineAt: h(24 * 5),
+      earlySale: Boolean(l.saleTargetHours),
+      saleTargetAt: l.saleTargetHours ? h(l.saleTargetHours) : null,
+      publishedAt: now,
+    },
+  });
+  const shipping = await prisma.deliveryOption.create({
+    data: {
+      listingId: listing.id,
+      method: "SHIPPING",
+      paymentTiming: l.onHandoverShipping ? "ON_HANDOVER" : "PREPAID",
+      paymentMethod: l.onHandoverShipping ? "CASH" : "BANK_TRANSFER",
+      prepayDeadlineAt: l.onHandoverShipping ? null : h(24 * 5 + 6),
+      paymentConfirmGuideHours: 24,
+      shippingRates: { create: [...SHIPPING_BANDS("大阪府"), ...SHIPPING_BANDS("京都府")] },
+    },
+  });
+  await prisma.scheduleSlot.createMany({
+    data: [6, 7, 9].map((d) => ({ listingId: listing.id, deliveryOptionId: shipping.id, startsAt: h(24 * d) })),
+  });
+  if (l.pickup) {
+    const pickup = await prisma.deliveryOption.create({
+      data: {
+        listingId: listing.id,
+        method: "PICKUP",
+        paymentTiming: "ON_HANDOVER",
+        paymentMethod: "CASH",
+        paymentConfirmGuideHours: 24,
+        shippingRates: {
+          create: ["大阪府", "京都府"].map((p) => ({ prefecture: p, minGramsExclusive: 0, maxGramsInclusive: 1_000_000, feeYen: 0 })),
+        },
+      },
+    });
+    await prisma.scheduleSlot.createMany({
+      data: [6, 8].map((d) => ({ listingId: listing.id, deliveryOptionId: pickup.id, startsAt: h(24 * d + 2), capacity: 3 })),
+    });
+  }
 }

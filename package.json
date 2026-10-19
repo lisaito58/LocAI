@@ -15,7 +15,8 @@
     "seed:demo": "tsx --conditions=react-server scripts/seed-demo.mts",
     "seed:test": "tsx --conditions=react-server scripts/seed-test-accounts.mts",
     "migrate:https": "tsx --conditions=react-server scripts/migrate-over-https.mts",
-    "reports:list": "tsx --conditions=react-server scripts/review-reports.mts"
+    "reports:list": "tsx --conditions=react-server scripts/review-reports.mts",
+    "seed:listings": "tsx --conditions=react-server scripts/seed-fresh-listings.mts"
   },
   "dependencies": {
     "@google/genai": "2.24.0",
