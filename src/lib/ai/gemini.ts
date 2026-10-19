@@ -84,7 +84,7 @@ export type SearchContext = {
   itemQuery: string;
   itemMode: string;
   quantityKg: string;
-  budgetYen: number;
+  budgetYen: number | null; // 未指定なら null（0円と誤解させない）
   useDate: string;
   purpose: string | null;
 };

@@ -34,8 +34,8 @@ export default function Home() {
               <span aria-hidden className="absolute -bottom-1 left-0 h-3 w-full -rotate-1 rounded-full bg-sprout/40" />
             </span>
           </h1>
-          <p className="mt-5 text-lg font-bold text-green-900/80">農家と店をつなぐ 🚜 🤝 🏮</p>
-          <p className="mt-4 max-w-xl rounded-3xl bg-white/85 p-4 text-sm leading-relaxed text-green-900/80 shadow-sm">
+          <p className="mt-5 text-lg font-bold text-gray-700">農家と店をつなぐ 🚜 🤝 🏮</p>
+          <p className="mt-4 max-w-xl rounded-3xl bg-white/85 p-4 text-sm leading-relaxed text-gray-700 shadow-sm">
             農家さんはまとまった在庫を一度出品するだけ。飲食店は販売単位の範囲で
             <strong>必要な量だけ</strong>購入希望を送れます。農家さんは複数のお店の希望をまとめて見て、注文ごとに販売を決められます。
           </p>
@@ -75,7 +75,7 @@ export default function Home() {
           <h2 className="section-title">
             <span aria-hidden>📦</span>売りすぎない仕組み
           </h2>
-          <p className="mt-2 text-sm text-green-900/70">
+          <p className="mt-2 text-sm text-gray-700">
             決まった量と予約中（仮押さえ）の量を足しても、出品した量を超えません。期限が過ぎた仮押さえは自動で戻ります。
           </p>
           <div className="mt-4 flex h-10 overflow-hidden rounded-full border-2 border-green-100 text-xs font-bold text-white">
@@ -87,7 +87,7 @@ export default function Home() {
             </div>
             <div className="flex flex-1 items-center justify-center bg-leaf-light text-leaf-dark">申込可能 18kg</div>
           </div>
-          <p className="mt-2 text-right text-xs text-green-900/60">例：賀茂茄子 30kg の出品 🍆</p>
+          <p className="mt-2 text-right text-xs text-gray-700">例：賀茂茄子 30kg の出品 🍆</p>
         </div>
       </section>
 
@@ -110,7 +110,7 @@ export default function Home() {
                 {e}
               </div>
               <div className="mt-1 font-bold text-leaf-dark">{t}</div>
-              <p className="mt-1 text-xs leading-relaxed text-green-900/70">{d}</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-700">{d}</p>
             </div>
           ))}
         </div>
@@ -128,7 +128,7 @@ function RoleCard({ emoji, title, lead, steps }: { emoji: string; title: string;
         </span>
         <div>
           <h2 className="text-lg font-bold text-leaf-dark">{title}</h2>
-          <p className="text-xs text-green-900/60">{lead}</p>
+          <p className="text-xs text-gray-700">{lead}</p>
         </div>
       </div>
       <ol className="mt-4 flex flex-col gap-2">
@@ -162,14 +162,14 @@ async function HeroActions() {
   if (!user) return <RoleButtons />;
   return (
     <div className="mt-8 flex flex-col items-center gap-2">
-      <p className="text-sm text-green-900/70">{user.name} さん、おかえりなさい 👋</p>
+      <p className="text-sm text-gray-700">{user.name} さん、おかえりなさい 👋</p>
       {user.role === "RESTAURANT" ? (
-        <Link href="/shop/search" className="btn-primary text-base">
-          🔍 野菜をさがす
+        <Link href="/shop" className="btn-primary text-base">
+          🏡 ホームへ
         </Link>
       ) : (
         <Link href="/farm" className="btn-primary text-base">
-          🌾 出品一覧へ
+          🏡 ホームへ
         </Link>
       )}
     </div>

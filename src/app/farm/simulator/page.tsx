@@ -79,7 +79,7 @@ async function Content() {
                   <span className="font-bold">
                     {s.note}・{formatKg(s.quantityGrams ?? 0)}
                   </span>
-                  <span className="text-xs text-green-900/60">{formatJst(s.createdAt)}（試算・実績ではありません）</span>
+                  <span className="text-xs text-gray-700">{formatJst(s.createdAt)}（試算・実績ではありません）</span>
                 </div>
                 <div>
                   商品代 {formatYen(s.itemSubtotalYen ?? 0)}

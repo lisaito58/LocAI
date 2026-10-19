@@ -50,7 +50,7 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
     }
     throw error;
   }
-  redirect(role === "FARMER" ? "/farm" : role === "RESTAURANT" ? "/shop/search" : "/");
+  redirect(role === "FARMER" ? "/farm" : role === "RESTAURANT" ? "/shop" : "/");
 }
 
 export async function signOut() {

@@ -1,21 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { StockBar } from "@/components/stock-bar";
-import { EmptyState, itemEmoji, Loading, Notice, Page, PageTitle } from "@/components/ui";
+import { Onboarding } from "@/components/onboarding";
+import { TodoCard } from "@/components/todo-card";
+import { Loading, Notice, Page } from "@/components/ui";
 import { expireDueOrders } from "@/lib/domain/orders";
-import { dbNow } from "@/lib/domain/tx";
-import { formatJst, formatYen } from "@/lib/domain/units";
+import { getFarmerTodo, SOON_HOURS, type FarmerTodo } from "@/lib/domain/todo";
 import { requireFarmer } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 
-export const metadata: Metadata = { title: "出品一覧 | LocAI" };
+export const metadata: Metadata = { title: "ホーム | LocAI" };
 
-export default function FarmPage() {
+export default function FarmHomePage() {
   return (
     <Page>
-      <PageTitle emoji="🌾" title="出品一覧" lead="出品ごとの在庫と、届いた購入希望の数を確認できます。" />
-      <Suspense fallback={<Loading />}>
+      <Suspense fallback={<Loading label="今やることを読み込み中" />}>
         <Content />
       </Suspense>
     </Page>
@@ -23,84 +22,90 @@ export default function FarmPage() {
 }
 
 async function Content() {
-  const { profile } = await requireFarmer();
-  if (!profile) {
+  const { user, profile } = await requireFarmer();
+  const me = await prisma.user.findUnique({ where: { id: user.id }, select: { onboardedAt: true } });
+  return (
+    <div className="flex flex-col gap-6">
+      {!me?.onboardedAt && <Onboarding role="FARMER" mode="first" />}
+      <div>
+        <p className="text-gray-700">{user.name} さん、こんにちは 👩‍🌾</p>
+        <h1 className="text-2xl font-bold text-leaf-dark">🏡 ホーム</h1>
+      </div>
+
+      {!profile ? (
+        <Notice tone="warn">
+          はじめに <Link href="/farm/profile" className="link">農園情報</Link> を登録してください。登録すると出品できます。
+        </Notice>
+      ) : (
+        <>
+          <Link href="/farm/listings/new" className="btn-primary py-4 text-xl">
+            ＋ 野菜を出品する
+          </Link>
+          <section className="flex flex-col gap-3" aria-labelledby="todo-h">
+            <h2 id="todo-h" className="section-title">
+              📋 今やること
+            </h2>
+            <TodoList farmerId={profile.id} />
+          </section>
+          <section className="card-soft flex flex-wrap gap-2">
+            <Link href="/farm/listings" className="btn-secondary btn-sm">
+              🌾 出品一覧・残量
+            </Link>
+            <Link href="/farm/simulator" className="btn-secondary btn-sm">
+              🧮 受取額の試算
+            </Link>
+            <Link href="/guide" className="btn-secondary btn-sm">
+              📖 使い方
+            </Link>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+async function TodoList({ farmerId }: { farmerId: string }) {
+  let todo: FarmerTodo;
+  try {
+    await expireDueOrders(prisma, { farmerId });
+    todo = await getFarmerTodo(prisma, farmerId, new Date());
+  } catch {
     return (
-      <Notice tone="warn">
-        はじめに <Link href="/farm/profile" className="link">農園情報</Link> を登録してください 👩‍🌾
+      <Notice tone="error">
+        件数を取得できませんでした（0件という意味ではありません）。少し待ってから画面を再読み込みしてください。
       </Notice>
     );
   }
-  await expireDueOrders(prisma, { farmerId: profile.id });
-  const now = await dbNow(prisma);
-  const listings = await prisma.listing.findMany({
-    where: { farmerId: profile.id },
-    orderBy: [{ status: "asc" }, { acceptDeadlineAt: "asc" }],
-    include: {
-      photos: { orderBy: { publishRound: "desc" }, take: 1, select: { url: true } },
-      _count: { select: { orders: { where: { status: { in: ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT"] } } } } },
-      inquiries: { where: { status: "OPEN" }, select: { id: true } },
-    },
-  });
-
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap gap-3">
-        <Link href="/farm/listings/new" className="btn-primary">
-          ＋ 新しく出品
-        </Link>
-        <Link href="/farm/orders" className="btn-secondary">
-          📬 届いた注文を見る
-        </Link>
-      </div>
-      {listings.length === 0 ? (
-        <EmptyState emoji="🌱">まだ出品がありません。「新しく出品」から始めましょう。</EmptyState>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {listings.map((l) => {
-            const accepting = l.status === "PUBLISHED" && l.acceptDeadlineAt > now;
-            return (
-              <div key={l.id} className="card flex flex-col gap-3">
-                <div className="flex gap-3">
-                  <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-leaf-light text-4xl">
-                    {l.photos[0] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={l.photos[0].url} alt={`${l.itemName}の写真`} className="size-full object-cover" />
-                    ) : (
-                      itemEmoji(l.itemName)
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className={`badge ${accepting ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
-                        {accepting ? "🟢 受付中" : l.status === "CLOSED" ? "⏸ 受付終了" : "⌛ 受付期限後"}
-                      </span>
-                      {l.publishRound > 1 && <span className="badge bg-sky-100 text-sky-800">🔁 再公開{l.publishRound - 1}回</span>}
-                    </div>
-                    <h2 className="mt-1 truncate text-lg font-bold">
-                      {itemEmoji(l.itemName)} {l.itemName}
-                    </h2>
-                    <p className="text-xs text-green-900/70">
-                      {formatYen(l.unitPriceYenPerKg)}/kg ・ 受付期限 {formatJst(l.acceptDeadlineAt)}
-                    </p>
-                  </div>
-                </div>
-                <StockBar total={l.totalGrams} sold={l.soldGrams} held={l.heldGrams} />
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  {l._count.orders > 0 && <span className="badge bg-amber-100 text-amber-800">⏳ 回答が必要 {l._count.orders}件</span>}
-                  {l.inquiries.length > 0 && <span className="badge bg-sky-100 text-sky-800">💬 相談 {l.inquiries.length}件</span>}
-                  <span className="flex-1" />
-                  <Link href={`/farm/listings/new?copy=${l.id}`} className="btn-secondary btn-sm">
-                    📋 複製
-                  </Link>
-                  <Link href={`/farm/listings/${l.id}`} className="btn-primary btn-sm">
-                    管理する →
-                  </Link>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <TodoCard
+        href="/farm/orders#awaiting"
+        emoji="📬"
+        label="回答待ちの購入希望"
+        count={todo.awaitingResponse}
+        sub={
+          todo.awaitingResponse > 0
+            ? `うち今日が回答期限：${todo.dueToday}件`
+            : "承認・条件変更・見送りを選ぶ注文"
+        }
+      />
+      <TodoCard href="/farm/orders#payment" emoji="💴" label="入金確認待ち" count={todo.paymentToConfirm} sub="お店が支払いを申告した注文" />
+      <TodoCard href="/farm/orders#handover" emoji="🚚" label="今日の発送・引き渡し予定" count={todo.handoverToday} sub="まだ記録していないもの" />
+      <TodoCard
+        href="/farm/listings#soon"
+        emoji="⏳"
+        label="販売希望期限が近い出品"
+        count={todo.saleTargetSoon}
+        sub={`${SOON_HOURS}時間以内・受付中で残りあり`}
+      />
+      {todo.waitingShopReagreement > 0 && (
+        <TodoCard
+          href="/farm/orders#reagreement"
+          emoji="📝"
+          label="お店の再同意待ち（あなたの対応は不要）"
+          count={todo.waitingShopReagreement}
+          tone="info"
+        />
       )}
     </div>
   );

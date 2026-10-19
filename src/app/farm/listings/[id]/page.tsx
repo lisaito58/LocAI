@@ -89,7 +89,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
           <h1 className="text-2xl font-bold text-leaf-dark">
             {itemEmoji(listing.itemName)} {listing.itemName}
           </h1>
-          <p className="text-sm text-green-900/70">
+          <p className="text-sm text-gray-700">
             {formatYen(listing.unitPriceYenPerKg)}/kg ・ 最低{formatKg(listing.minOrderGrams)}・{formatKg(listing.orderStepGrams)}単位 ・ 回答猶予
             {listing.responseGraceMinutes / 60}時間
           </p>
@@ -144,7 +144,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
                       </span>
                       <strong>{formatKg(o.status === "AWAITING_REAGREEMENT" ? o.heldGrams : o.quantityGrams)}</strong>
                       <span>合計 {formatYen(o.changeProposal && !o.changeProposal.respondedAt ? o.changeProposal.newTotalYen : o.totalYen)}</span>
-                      <span className="text-xs text-green-900/70">受け渡し {formatJst(o.snapScheduleStartsAt)}</span>
+                      <span className="text-xs text-gray-700">受け渡し {formatJst(o.snapScheduleStartsAt)}</span>
                       <span className="ml-auto text-xs font-bold text-amber-700">⏰ {formatJst(o.deadlineAt)}まで</span>
                     </Link>
                   </li>
@@ -160,7 +160,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
       <section className="card flex flex-col gap-3">
         <h2 className="section-title">💬 出品への相談（購入希望ではありません・数量は確保されません）</h2>
         {listing.inquiries.length === 0 ? (
-          <p className="text-sm text-green-900/60">相談はまだありません。</p>
+          <p className="text-sm text-gray-700">相談はまだありません。</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {listing.inquiries.map((q) => (
@@ -181,7 +181,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
       <section className="card flex flex-col gap-3">
         <h2 className="section-title">✅ 販売確定した注文</h2>
         {confirmed.length === 0 ? (
-          <p className="text-sm text-green-900/60">まだありません。</p>
+          <p className="text-sm text-gray-700">まだありません。</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {confirmed.map((o) => (
@@ -197,7 +197,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
         )}
         {ended.length > 0 && (
           <details className="text-sm">
-            <summary className="cursor-pointer text-green-900/70">終了した注文（見送り・取消・期限切れ）{ended.length}件</summary>
+            <summary className="cursor-pointer text-gray-700">終了した注文（見送り・取消・期限切れ）{ended.length}件</summary>
             <ul className="mt-2 flex flex-col gap-1">
               {ended.map((o) => (
                 <li key={o.id}>

@@ -129,7 +129,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             )}
           </div>
           {currentPhotos[0] && (
-            <p className="text-center text-xs text-green-900/60">📷 農家さんが撮影した実物写真（撮影日 {formatDateOnly(currentPhotos[0].takenOn)}）</p>
+            <p className="text-center text-xs text-gray-700">📷 農家さんが撮影した実物写真（撮影日 {formatDateOnly(currentPhotos[0].takenOn)}）</p>
           )}
         </div>
         <div className="flex flex-1 flex-col gap-2">
@@ -164,7 +164,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
           {listing.farmer.mainItems && <p className="mt-1">主な品目：{listing.farmer.mainItems}</p>}
           {listing.farmer.commitment && <p className="mt-1">こだわり（自己申告）：{listing.farmer.commitment}</p>}
           {listing.farmer.introduction && <p className="mt-2 whitespace-pre-wrap">{listing.farmer.introduction}</p>}
-          <p className="mt-2 text-xs text-green-900/60">
+          <p className="mt-2 text-xs text-gray-700">
             回答の目安：{listing.farmer.responseGuide ?? "未設定"}
             {listing.farmer.availableWeekdays && ` ・ 対応曜日：${listing.farmer.availableWeekdays}`}（参考。回答を保証するものではありません）
           </p>
@@ -281,7 +281,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         <p className="rounded-2xl bg-white px-3 py-2 text-sm font-bold text-amber-800">
           ⚠️ 購入希望ではなく、数量は確保されません（仮押さえなし）。
         </p>
-        <p className="text-xs text-green-900/70">
+        <p className="text-xs text-gray-700">
           第一候補の注文が成立しなかったときの「予備」として相談できます。第一候補が回答待ち・確定の間は、予備から注文に進めません。複数の農家さんから実際に買う場合は、別の購入予定として通常どおり申し込んでください。
         </p>
         <ActionButton
@@ -314,7 +314,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
 function Info({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="rounded-xl bg-white px-3 py-1.5">
-      <div className="text-xs text-green-900/60">{label}</div>
+      <div className="text-xs text-gray-700">{label}</div>
       <div className={strong ? "text-xl font-bold text-leaf-dark" : "font-bold"}>{value}</div>
     </div>
   );

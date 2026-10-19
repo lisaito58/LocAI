@@ -74,9 +74,23 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
   const confirmed = order.status === "CONFIRMED";
   const p = order.changeProposal;
   const pendingProposal = p && !p.respondedAt && order.status === "AWAITING_REAGREEMENT";
+  // 連絡先は販売確定時に保存した値を使う（以前の注文で未保存なら、現在のプロフィールを表示）
   const counterpart = isFarmer
-    ? { label: "お店", name: order.restaurant.shopName, area: `${order.restaurant.prefecture}${order.restaurant.city}`, address: order.restaurant.addressLine, phone: order.restaurant.contactPhone }
-    : { label: "農家さん", name: order.farmer.farmName, area: `${order.farmer.prefecture}${order.farmer.city}`, address: order.farmer.addressLine, phone: order.farmer.contactPhone };
+    ? {
+        label: "お店",
+        name: order.restaurant.shopName,
+        area: `${order.restaurant.prefecture}${order.restaurant.city}`,
+        address: order.snapRestaurantAddress ?? `${order.restaurant.prefecture}${order.restaurant.city}${order.restaurant.addressLine}`,
+        phone: order.snapRestaurantPhone ?? order.restaurant.contactPhone,
+      }
+    : {
+        label: "農家さん",
+        name: order.farmer.farmName,
+        area: `${order.farmer.prefecture}${order.farmer.city}`,
+        address: order.snapFarmerAddress ?? `${order.farmer.prefecture}${order.farmer.city}${order.farmer.addressLine}`,
+        phone: order.snapFarmerPhone ?? order.farmer.contactPhone,
+      };
+  const contactFromSnapshot = Boolean(isFarmer ? order.snapRestaurantAddress : order.snapFarmerAddress);
 
   const slots =
     isFarmer && order.status === "AWAITING_RESPONSE" && !p
@@ -227,8 +241,13 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
         <>
           <section className="card flex flex-col gap-3">
             <h2 className="section-title">📇 取引相手の連絡先（販売確定後に表示）</h2>
+            <p className="hint">
+              {contactFromSnapshot
+                ? "販売確定したときの住所・電話番号です。プロフィールをあとで変更しても、この注文の届け先は変わりません。"
+                : "この注文は確定時の住所を保存する前の注文のため、現在のプロフィールを表示しています。"}
+            </p>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
-              <Info label="住所" value={`${counterpart.area}${counterpart.address}`} />
+              <Info label="住所" value={counterpart.address} />
               <Info label="電話番号" value={counterpart.phone} />
             </div>
           </section>
@@ -330,7 +349,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
               ✏️ 記録を訂正
             </ActionButton>
             {order.corrections.length > 0 && (
-              <ul className="text-xs text-green-900/70">
+              <ul className="text-xs text-gray-700">
                 {order.corrections.map((c) => (
                   <li key={c.id}>
                     {formatJst(c.createdAt)} {names.get(c.actorId)}：{c.recordType === "payment" ? "支払い" : "受け渡し"}の記録を訂正（理由：{c.reason}）
@@ -382,7 +401,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
       <section className="card flex flex-col gap-3">
         <h2 className="section-title">💬 この注文の相談（当事者だけが見られます）</h2>
         {order.messages.length === 0 ? (
-          <p className="text-sm text-green-900/60">まだメッセージはありません。</p>
+          <p className="text-sm text-gray-700">まだメッセージはありません。</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {order.messages.map((m) => (
@@ -426,7 +445,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
 function Info({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="rounded-xl bg-leaf-light/50 px-3 py-1.5">
-      <div className="text-xs text-green-900/60">{label}</div>
+      <div className="text-xs text-gray-700">{label}</div>
       <div className={strong ? "text-xl font-bold text-leaf-dark" : "font-bold"}>{value}</div>
     </div>
   );

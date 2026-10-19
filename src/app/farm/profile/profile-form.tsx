@@ -1,10 +1,13 @@
 "use client";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useKeepForm } from "@/components/use-keep-form";
 import { generateIntroDraft, saveFarmerProfile } from "@/app/actions/profile";
 import { FormMessage } from "@/app/form-parts";
-import { Field, PrefectureSelect, TextInput } from "@/components/fields";
+import { AddressFields } from "@/components/address-fields";
+import { Field, ReqMark, TextInput } from "@/components/fields";
+import { markDirty } from "@/components/logout-button";
+import { PhoneField } from "@/components/phone-field";
 import { WEEKDAYS } from "@/lib/validation/profile";
 
 type Initial = {
@@ -29,6 +32,10 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [drafting, startDraft] = useTransition();
+  // 保存できたら「未保存」の目印を外す
+  useEffect(() => {
+    if (state?.ok && formRef.current) formRef.current.dataset.dirty = "false";
+  }, [state]);
 
   function requestDraft() {
     const fd = new FormData(formRef.current!);
@@ -49,24 +56,22 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
   }
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-5">
+    <form ref={formRef} onSubmit={onSubmit} onChange={markDirty} data-dirty-label="農園情報" className="flex flex-col gap-5">
       <section className="card flex flex-col gap-4">
         <h2 className="section-title">🌾 公開する情報</h2>
-        <Field label="農園名（デモでは架空の名前）" errors={e?.farmName}>
+        <Field label="農園名（デモでは架空の名前）" required errors={e?.farmName}>
           <TextInput name="farmName" defaultValue={initial?.farmName} required maxLength={50} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="都道府県" errors={e?.prefecture}>
-            <PrefectureSelect name="prefecture" defaultValue={initial?.prefecture ?? "京都府"} />
-          </Field>
-          <Field label="市区町村" errors={e?.city}>
-            <TextInput name="city" defaultValue={initial?.city} required maxLength={30} placeholder="南丹市" />
-          </Field>
-        </div>
-        <Field label="主な品目" errors={e?.mainItems}>
+        <AddressFields initial={{ prefecture: initial?.prefecture ?? "京都府", city: initial?.city }} errors={e} showAddressLine={false} />
+        <Field
+          label="主な品目"
+          optional
+          hint="「、」で区切って入力します。出品するときの食材欄に候補として出ます（例：賀茂茄子、万願寺唐辛子）"
+          errors={e?.mainItems}
+        >
           <TextInput name="mainItems" defaultValue={initial?.mainItems} maxLength={100} placeholder="賀茂茄子、万願寺唐辛子" />
         </Field>
-        <Field label="栽培のこだわり（自己申告として表示）" errors={e?.commitment}>
+        <Field label="栽培のこだわり（自己申告として表示）" optional errors={e?.commitment}>
           <textarea name="commitment" defaultValue={initial?.commitment} maxLength={300} rows={3} className="input" />
         </Field>
 
@@ -92,7 +97,7 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
           )}
         </div>
 
-        <Field label="紹介文（確認・修正してから保存すると公開されます）" errors={e?.introduction}>
+        <Field label="紹介文（確認・修正してから保存すると公開されます）" optional errors={e?.introduction}>
           <textarea
             name="introduction"
             value={intro}
@@ -102,14 +107,20 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
             className="input"
           />
         </Field>
-        <Field label="回答の目安（参考表示）" hint="例：当日の夕方までに返信します" errors={e?.responseGuide}>
+        <Field label="回答の目安（参考表示）" optional hint="例：当日の夕方までに返信します" errors={e?.responseGuide}>
           <TextInput name="responseGuide" defaultValue={initial?.responseGuide} maxLength={50} />
         </Field>
         <fieldset className="flex flex-col gap-1">
-          <legend className="label">回答できる曜日（参考表示）</legend>
+          <legend className="label">
+            回答できる曜日（参考表示）
+            <ReqMark optional />
+          </legend>
           <div className="flex flex-wrap gap-2">
             {WEEKDAYS.map((d) => (
-              <label key={d} className="badge cursor-pointer bg-leaf-light px-3 py-1.5 text-sm has-checked:bg-leaf has-checked:text-white">
+              <label
+                key={d}
+                className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-full border-2 border-green-200 bg-white px-3 text-base font-bold has-checked:border-leaf has-checked:bg-leaf has-checked:text-white has-focus-visible:ring-4 has-focus-visible:ring-green-200"
+              >
                 <input
                   type="checkbox"
                   name="availableWeekdays"
@@ -118,6 +129,7 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
                   className="sr-only"
                 />
                 {d}
+                <span className="sr-only">曜日</span>
               </label>
             ))}
           </div>
@@ -126,14 +138,13 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
 
       <section className="card flex flex-col gap-4">
         <h2 className="section-title">🔒 取引相手にだけ表示する情報</h2>
-        <Field label="詳細住所" errors={e?.addressLine}>
-          <TextInput name="addressLine" defaultValue={initial?.addressLine} required maxLength={100} />
+        <Field label="番地・建物名" required hint="都道府県・市区町村は上で選んだものを使います" errors={e?.addressLine}>
+          <TextInput name="addressLine" defaultValue={initial?.addressLine} required maxLength={100} placeholder="例：園部町1-2-3" />
         </Field>
-        <Field label="電話番号" errors={e?.contactPhone}>
-          <TextInput name="contactPhone" defaultValue={initial?.contactPhone} required inputMode="tel" />
-        </Field>
+        <PhoneField label="電話番号" defaultValue={initial?.contactPhone} serverErrors={e?.contactPhone} />
         <Field
           label="入金確認の目安（時間）"
+          required
           hint="店の支払申告から何時間以内に確認するかの目安。出品の初期値になり、注文時の値が注文に保存されます。"
           errors={e?.paymentConfirmGuideHours}
         >
@@ -153,7 +164,7 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
       </button>
       {(state?.ok || initial) && (
         <Link href="/farm" className="btn-secondary">
-          🌾 出品一覧へ
+          🏡 ホームへ
         </Link>
       )}
     </form>

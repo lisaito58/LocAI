@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Zen_Maru_Gothic } from "next/font/google";
+import Script from "next/script";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -22,13 +23,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ja" className={`${maru.variable} h-full antialiased`}>
+    <html lang="ja" className={`${maru.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="flex min-h-full flex-col">
+        {/* 文字サイズ「大きめ」の設定を、最初の表示の前に反映する（保存先はこのブラウザ） */}
+        <Script id="text-size" strategy="beforeInteractive">
+          {`try{if(localStorage.getItem("locai-pref:text-size")==="large")document.documentElement.dataset.text="large"}catch(e){}`}
+        </Script>
         <Suspense fallback={<HeaderShell />}>
           <SiteHeader />
         </Suspense>
         <div className="flex flex-1 flex-col">{children}</div>
-        <footer className="mt-12 border-t border-green-100 bg-white/70 py-6 text-center text-xs text-green-900/60">
+        <footer className="mt-12 border-t border-green-100 bg-white/70 py-6 text-center text-xs text-gray-700">
           <p>🌱 LocAI — 地産地消・必要量でつながる野菜仕入れ 🧺</p>
           <p className="mt-1">アプリ内での決済・配送手配は行いません。デモは架空のデータです。</p>
         </footer>

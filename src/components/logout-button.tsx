@@ -1,23 +1,39 @@
 "use client";
-// ログアウト時に、このブラウザの下書き（検索条件・出品の入力途中）も消す
+// ログアウト。押すと確認し、未保存の入力があれば失われる内容を案内する。
+// 共有端末で次の人に見えないよう、このブラウザの下書き（検索条件・出品の入力途中）も消す。
 import { signOut } from "@/app/auth-actions";
 
 export function LogoutButton() {
   return (
     <form
       action={signOut}
-      onSubmit={() => {
+      onSubmit={(e) => {
+        const dirty = [...document.querySelectorAll<HTMLFormElement>("form[data-dirty='true']")]
+          .map((f) => f.dataset.dirtyLabel)
+          .filter(Boolean);
+        const lines = ["ログアウトしますか？"];
+        if (dirty.length) lines.push(`\n保存していない「${dirty.join("」「")}」の変更は失われます。`);
+        lines.push("\nこのブラウザに保存した入力途中の下書き（出品・検索条件）も消去されます。");
+        if (!window.confirm(lines.join(""))) {
+          e.preventDefault();
+          return;
+        }
         try {
           Object.keys(localStorage)
             .filter((k) => k.startsWith("locai:"))
             .forEach((k) => localStorage.removeItem(k));
+          sessionStorage.clear();
         } catch {}
       }}
-      className="shrink-0"
     >
-      <button type="submit" className="rounded-full px-3 py-1.5 text-xs text-green-900/70 hover:bg-leaf-light">
-        ログアウト
+      <button type="submit" className="btn-danger w-full">
+        🚪 ログアウト
       </button>
     </form>
   );
+}
+
+// フォームの入力が変わったら「未保存」の目印を付ける（ログアウト時の案内用）
+export function markDirty(e: { currentTarget: HTMLFormElement }) {
+  e.currentTarget.dataset.dirty = "true";
 }

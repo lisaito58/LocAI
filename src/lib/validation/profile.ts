@@ -1,6 +1,8 @@
 // プロフィールの入力ルール
 import { z } from "zod";
+import { isValidCity } from "@/lib/data/municipalities";
 import { blankToUndefined, PREFECTURES } from "./listing";
+import { checkPhone } from "./phone";
 
 const required = (label: string, max: number) =>
   z.string().trim().min(1, `${label}を入力してください`).max(max, `${label}は${max}文字以内で入力してください`);
@@ -14,18 +16,31 @@ const optional = (max: number) =>
 
 const base = {
   prefecture: z.enum(PREFECTURES, "都道府県を選んでください"),
-  city: required("市区町村", 30),
-  addressLine: required("詳細住所", 100),
-  contactPhone: z
-    .string()
-    .trim()
-    .regex(/^[0-9-]{10,13}$/, "電話番号は数字とハイフンで入力してください"),
+  city: z.string().trim().min(1, "市区町村を選んでください"),
+  addressLine: required("番地・建物名", 100),
+  contactPhone: z.string().transform((v, ctx) => {
+    const r = checkPhone(v);
+    if (!r.ok) {
+      ctx.addIssue({ code: "custom", message: r.message });
+      return z.NEVER;
+    }
+    return r.value;
+  }),
 };
 
-export const restaurantProfileSchema = z.object({
-  shopName: required("店名", 50),
-  ...base,
-});
+// 市区町村は、選んだ都道府県の一覧にあるものだけ受け付ける
+const cityMatchesPrefecture = (v: { prefecture: string; city: string }, ctx: z.RefinementCtx) => {
+  if (v.city && !isValidCity(v.prefecture, v.city)) {
+    ctx.addIssue({ code: "custom", path: ["city"], message: "市区町村を、選んだ都道府県の一覧から選び直してください" });
+  }
+};
+
+export const restaurantProfileSchema = z
+  .object({
+    shopName: required("店名", 50),
+    ...base,
+  })
+  .superRefine(cityMatchesPrefecture);
 
 export const WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"] as const;
 
@@ -45,7 +60,7 @@ export const farmerProfileSchema = z.object({
       .min(1, "入金確認目安は1時間以上にしてください")
       .max(336, "入金確認目安は336時間（14日）以内にしてください"),
   ),
-});
+}).superRefine(cityMatchesPrefecture);
 
 // AI紹介文の下書きに使う、本人が入力した公開用テキストだけ
 export const introDraftSchema = z.object({
@@ -54,4 +69,4 @@ export const introDraftSchema = z.object({
   city: required("市区町村", 30),
   mainItems: required("主な品目", 100),
   commitment: required("栽培のこだわり", 300),
-});
+}).superRefine(cityMatchesPrefecture);
