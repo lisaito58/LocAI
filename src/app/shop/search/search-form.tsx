@@ -89,7 +89,8 @@ export function SearchForm({ initial, prefecture, sort }: { initial: SearchValue
           🥬 食材
           <ReqMark optional />
         </span>
-        <input className="input" value={v.item} onChange={(e) => set("item", e.target.value)} placeholder="例：万願寺唐辛子（空欄ならすべての野菜）" maxLength={50} />
+        <input className="input" value={v.item} onChange={(e) => set("item", e.target.value)} placeholder="例：万願寺唐辛子" maxLength={50} />
+        <span className="hint">空欄なら、すべての野菜を表示します</span>
       </label>
       {v.item.trim() && (
         <fieldset className="flex flex-col gap-1">
