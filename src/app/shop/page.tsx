@@ -8,6 +8,7 @@ import { expireDueOrders } from "@/lib/domain/orders";
 import { pickEarlySale, searchListings } from "@/lib/domain/search";
 import { getShopTodo, jstDayRange, type ShopTodo } from "@/lib/domain/todo";
 import { dateToJstDateText, formatDateOnly, formatJst, formatKg } from "@/lib/domain/units";
+import { countUnreadInquiries } from "@/lib/domain/records";
 import { requireRestaurant } from "@/lib/guard";
 import { isServicePrefecture } from "@/lib/validation/listing";
 import { prisma } from "@/lib/prisma";
@@ -53,7 +54,7 @@ async function Content() {
               📋 今やること
             </h2>
             <Suspense fallback={<Loading label="件数を読み込み中" />}>
-              <TodoList restaurantId={profile.id} />
+              <TodoList restaurantId={profile.id} userId={user.id} />
             </Suspense>
           </section>
           <Suspense fallback={<Loading label="確保済みの食材を読み込み中" />}>
@@ -71,11 +72,13 @@ async function Content() {
   );
 }
 
-async function TodoList({ restaurantId }: { restaurantId: string }) {
+async function TodoList({ restaurantId, userId }: { restaurantId: string; userId: string }) {
   let todo: ShopTodo;
+  let inquiries = 0;
   try {
     await expireDueOrders(prisma, { restaurantId });
     todo = await getShopTodo(prisma, restaurantId, new Date());
+    inquiries = await countUnreadInquiries(prisma, userId, "RESTAURANT");
   } catch {
     return <Notice tone="error">件数を取得できませんでした（0件という意味ではありません）。少し待ってから画面を再読み込みしてください。</Notice>;
   }
@@ -84,6 +87,7 @@ async function TodoList({ restaurantId }: { restaurantId: string }) {
       <TodoCard href="/shop/orders#reagreement" emoji="📝" label="条件変更の確認・再同意" count={todo.needsReagreement} sub="農家さんが数量・日時・送料の変更を提案" />
       <TodoCard href="/shop/orders#payment" emoji="💴" label="支払いが必要" count={todo.paymentNeeded} sub="アプリ外で支払い、申告してください" />
       <TodoCard href="/shop/orders#receive" emoji="📦" label="受け取りの確認が必要" count={todo.receiveNeeded} sub="受け取ったら記録してください" />
+      <TodoCard href="/inquiries" emoji="💬" label="返信が届いた相談" count={inquiries} sub="農家さんへの質問の新着（注文とは別）" />
       <TodoCard
         href="/shop/orders#awaiting"
         emoji="⏳"

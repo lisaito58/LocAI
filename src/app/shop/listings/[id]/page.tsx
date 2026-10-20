@@ -126,11 +126,11 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
   // 前回のロス記録による注文前の案内（記録がなければ出さない）
   const lossWarning = quote?.ok ? await getLossWarning(prisma, profile.id, listing.itemName) : null;
 
-  const myOrders = await prisma.order.findMany({
-    where: { restaurant: { userId: profile.userId }, listingId: { not: listing.id }, status: { in: ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT", "CONFIRMED"] } },
+  // この出品への質問が続いていれば、その会話に案内する
+  const openInquiry = await prisma.listingInquiry.findFirst({
+    where: { listingId: listing.id, restaurantId: profile.id, status: "OPEN", primaryOrderId: null },
     orderBy: { createdAt: "desc" },
-    take: 20,
-    select: { id: true, snapItemName: true, quantityGrams: true, useDate: true, farmer: { select: { farmName: true } } },
+    select: { id: true },
   });
   // 申込フォーム（前回のロス記録による案内がある場合は、その後に表示する）
   const orderForm = quote?.ok ? (
@@ -233,7 +233,12 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             </div>
             <div className="mt-1 flex flex-wrap gap-1 text-xs">
               {o.shippingRates.length === 0 ? (
-                <span className="badge bg-amber-100 text-amber-800">{profile.prefecture}への送料は未設定（相談のみ）</span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="badge bg-amber-100 px-3 py-1 text-sm text-amber-950">{profile.prefecture}への送料は未設定</span>
+                  <a href={`${searchHref(q, { ask: "shipping" }, `/shop/listings/${listing.id}`)}#ask`} className="btn-secondary btn-sm">
+                    📮 送料を問い合わせる
+                  </a>
+                </span>
               ) : (
                 o.shippingRates.map((r) => (
                   <span key={r.id} className="badge bg-white">
@@ -360,36 +365,38 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         )}
       </section>
 
-      {/* 予備相談 */}
-      <section className="card-soft flex flex-col gap-3">
-        <h2 className="section-title">💬 この出品について相談する</h2>
-        <p className="rounded-2xl bg-white px-3 py-2 text-sm font-bold text-amber-800">
-          ⚠️ 購入希望ではなく、数量は確保されません（仮押さえなし）。
-        </p>
-        <p className="text-xs text-gray-700">
-          第一候補の注文が成立しなかったときの「予備」として相談できます。第一候補が回答待ち・確定の間は、予備から注文に進めません。複数の農家さんから実際に買う場合は、別の購入予定として通常どおり申し込んでください。
-        </p>
+      {/* 農家さんへの質問（購入希望とは別。在庫は確保されない） */}
+      <section id="ask" className="card-soft flex scroll-mt-24 flex-col gap-3">
+        <h2 className="section-title">💬 農家さんに質問する</h2>
+        <p className="rounded-xl bg-white px-3 py-2 text-sm font-bold">メッセージだけでは注文や在庫の確保はされません。</p>
+        {openInquiry && (
+          <p className="text-sm">
+            この出品への質問が続いています。
+            <Link href={`/inquiries/${openInquiry.id}`} className="link ml-1">
+              これまでのやり取りを見る
+            </Link>
+            （ここから送ると、同じ相談に続けて書き込まれます）
+          </p>
+        )}
         <ActionButton
           action={openInquiryAction.bind(null, listing.id)}
-          className="btn-secondary btn-sm self-start"
+          className="btn-secondary self-start"
           fields={
-            <>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="label">第一候補の注文（予備相談の場合）</span>
-                <select name="primaryOrderId" className="input" defaultValue="">
-                  <option value="">紐付けない（送料などの相談）</option>
-                  {myOrders.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.snapItemName} {formatKg(o.quantityGrams)}（{o.farmer.farmName}・使用日 {formatDateOnly(o.useDate)}）
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <textarea name="body" required maxLength={500} rows={3} className="input" placeholder="例：第一候補がだめだった場合、3kgお願いできますか？" />
-            </>
+            <label className="flex flex-col gap-1">
+              <span className="label">質問の内容（500文字以内）</span>
+              <textarea
+                name="body"
+                required
+                maxLength={500}
+                rows={3}
+                className="input"
+                defaultValue={q.ask === "shipping" ? `${profile.prefecture}${q.purchaseKg || q.qty ? `への${q.purchaseKg || q.qty}kgの` : "への"}送料を教えてください。` : ""}
+                placeholder="例：大阪市への送料を教えてください／野菜の大きさを教えてください"
+              />
+            </label>
           }
         >
-          💬 相談を送る
+          ✉️ 質問を送る
         </ActionButton>
       </section>
     </div>

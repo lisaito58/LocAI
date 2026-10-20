@@ -152,15 +152,20 @@ async function Content() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="section-title">💬 出品への相談（仮押さえなし）</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="section-title">💬 農家さんへの質問（注文とは別）</h2>
+          <Link href="/inquiries" className="btn-secondary btn-sm">
+            相談一覧を開く
+          </Link>
+        </div>
         {inquiries.length === 0 ? (
           <p className="text-sm text-gray-700">相談はまだありません。</p>
         ) : (
           inquiries.map((q) => (
             <Link key={q.id} href={`/inquiries/${q.id}`} className="card-soft flex flex-wrap items-center gap-2 p-3 text-sm hover:bg-leaf-light">
               {itemEmoji(q.listing.itemName)} {q.listing.itemName}（{q.listing.farmer.farmName}）
-              <span className="badge bg-white">{q.primaryOrderId ? "予備相談" : "相談"}</span>
-              <span className="badge bg-white">{q.status === "OPEN" ? "相談中" : q.status === "CONVERTED" ? "注文に進んだ" : "終了"}</span>
+              <span className="badge bg-white">{q.primaryOrderId ? "予備の相談" : "質問"}</span>
+              <span className="badge bg-white">{q.status === "CLOSED" ? "終えた相談" : "やり取り中"}</span>
             </Link>
           ))
         )}

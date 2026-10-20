@@ -29,7 +29,7 @@ const LINKS: Record<"FARMER" | "RESTAURANT" | "GUEST", { href: string; label: st
   ],
 };
 
-export function AppMenu({ role }: { role: Role }) {
+export function AppMenu({ role, inquiryUnread = 0 }: { role: Role; inquiryUnread?: number }) {
   const ref = useRef<HTMLDialogElement>(null);
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -51,6 +51,11 @@ export function AppMenu({ role }: { role: Role }) {
         className="menu-toggle ml-auto md:ml-0"
       >
         <span aria-hidden>☰</span> メニュー
+        {inquiryUnread > 0 && (
+          <span className="rounded-full bg-tomato px-1.5 text-sm leading-6 text-white" aria-label={`新着の相談 ${inquiryUnread}件`}>
+            💬{inquiryUnread}
+          </span>
+        )}
       </button>
       <dialog
         ref={ref}
@@ -72,6 +77,14 @@ export function AppMenu({ role }: { role: Role }) {
           </div>
           <nav aria-label="補助メニュー">
             <ul className="flex flex-col gap-2">
+              {role && (
+                <li>
+                  <Link href="/inquiries" className="btn-secondary w-full justify-start text-left">
+                    <span aria-hidden>💬</span>
+                    相談一覧{inquiryUnread > 0 && `（${role === "FARMER" ? "返信が必要" : "新着"} ${inquiryUnread}件）`}
+                  </Link>
+                </li>
+              )}
               {LINKS[role ?? "GUEST"].map((l) => (
                 <li key={l.href}>
                   <Link href={l.href} className="btn-secondary w-full justify-start text-left">

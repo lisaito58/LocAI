@@ -402,10 +402,20 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
           ) : (
             <>
               <p className="text-sm text-amber-900">
-                お店の地域・この数量の送料が登録されていないため、予算内かどうかは分かりません。購入希望は送れず、仮押さえもされません。相談して農家さんが送料を登録したら、最新の総額で申し込めます。
+                お店の地域・この数量の送料が登録されていないため、予算内かどうかは分かりません。購入希望は送れず、仮押さえもされません。「送料を問い合わせる」から農家さんに質問できます。農家さんが送料を登録したら、最新の総額で申し込めます。
               </p>
               {result.unsetShipping.map((c) => (
-                <CandidateCard key={c.listingId} c={c} href={detailHref(c)} wantedGrams={p.quantityGrams} />
+                <CandidateCard
+                  key={c.listingId}
+                  c={c}
+                  href={detailHref(c)}
+                  wantedGrams={p.quantityGrams}
+                  footer={
+                    <Link href={`${searchHref(raw, { ask: "shipping", purchaseKg: p.quantityGrams ? gramsToKgText(p.quantityGrams) : null, page: null }, `/shop/listings/${c.listingId}`)}#ask`} className="btn-secondary self-start">
+                      📮 送料を問い合わせる
+                    </Link>
+                  }
+                />
               ))}
             </>
           )}

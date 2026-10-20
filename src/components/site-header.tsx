@@ -2,13 +2,20 @@ import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
 import { AppMenu } from "@/components/app-menu";
 import { farmerBadge, getFarmerTodo, getShopTodo, shopBadge } from "@/lib/domain/todo";
+import { countUnreadInquiries } from "@/lib/domain/records";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 
 export async function SiteHeader() {
   const user = await getCurrentUser();
   let badge: number | null = null;
+  let inquiryUnread = 0;
   if (user) {
+    try {
+      inquiryUnread = await countUnreadInquiries(prisma, user.id, user.role);
+    } catch {
+      inquiryUnread = 0;
+    }
     // バッジの件数が取れなくても、メニュー自体は表示する
     try {
       const now = new Date();
@@ -38,7 +45,7 @@ export async function SiteHeader() {
             ログイン
           </Link>
         )}
-        <AppMenu role={user?.role ?? null} />
+        <AppMenu role={user?.role ?? null} inquiryUnread={inquiryUnread} />
       </div>
     </header>
   );
