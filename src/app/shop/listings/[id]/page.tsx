@@ -143,7 +143,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             👩‍🌾 <strong>{listing.farmer.farmName}</strong>（📍{listing.farmer.prefecture}
             {listing.farmer.city}）
           </p>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="grid gap-2 text-sm min-[400px]:grid-cols-2">
             <Info label="単価" value={`${formatYen(listing.unitPriceYenPerKg)}/kg`} />
             <Info label="申込可能" value={formatKg(Math.max(0, available))} />
             <Info label="販売単位" value={`最低${formatKg(listing.minOrderGrams)}・${formatKg(listing.orderStepGrams)}刻み`} />
@@ -258,7 +258,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             {quote?.ok && (
               <div className="flex flex-col gap-3">
                 <div className="rounded-3xl border-2 border-leaf bg-leaf-light/40 p-4">
-                  <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                  <div className="grid gap-2 text-sm min-[400px]:grid-cols-2 sm:grid-cols-4">
                     <Info label="数量" value={formatKg(quote.quote.quantityGrams)} />
                     <Info label="商品代" value={formatYen(quote.quote.itemSubtotalYen)} />
                     <Info label="送料" value={quote.quote.shippingFeeYen === 0 ? "0円" : formatYen(quote.quote.shippingFeeYen)} />

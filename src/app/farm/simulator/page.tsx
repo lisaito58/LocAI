@@ -38,7 +38,7 @@ async function Content() {
           className="btn-primary self-start"
           fields={
             <div className="flex flex-col gap-4 text-sm">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="grid items-start gap-3 sm:grid-cols-3">
                 <In name="itemName" label="🥬 品目" placeholder="賀茂茄子" />
                 <In name="quantityKg" label="⚖️ 仮の販売量（kg）" placeholder="10" />
                 <In name="unitPriceYenPerKg" label="💴 仮の単価（円/kg）" placeholder="900" />
@@ -49,7 +49,7 @@ async function Content() {
               </div>
               <fieldset className="rounded-2xl bg-leaf-light/40 p-3">
                 <legend className="label px-1">🏪 市場販売との比較（任意・あなたが入力した実績のみ）</legend>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid items-start gap-2 sm:grid-cols-3">
                   <In name="marketItemName" label="品目" placeholder="賀茂茄子" />
                   <In name="marketKg" label="量（kg）" placeholder="10" />
                   <In name="marketAmountYen" label="手元に残った額（円）" placeholder="6000" />

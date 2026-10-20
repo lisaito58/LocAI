@@ -211,7 +211,7 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
                 const active = p.sort === key;
                 if (key === "total" && !qtyGiven) {
                   return (
-                    <span key={key} aria-disabled="true" className="flex min-h-10 items-center rounded-full bg-gray-100 px-3 font-bold text-gray-700">
+                    <span key={key} aria-disabled="true" className="flex min-h-10 items-center rounded-lg bg-gray-100 px-3 font-bold text-gray-700">
                       {SORT_LABELS[key]}（数量を入れると使えます）
                     </span>
                   );
@@ -221,7 +221,7 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
                     key={key}
                     href={searchHref(raw, { sort: key, page: null })}
                     aria-current={active ? "true" : undefined}
-                    className={`flex min-h-10 items-center rounded-full px-3 font-bold ${
+                    className={`flex min-h-10 items-center rounded-lg px-3 py-1.5 leading-snug font-bold ${
                       active ? "bg-leaf text-white" : "bg-white text-leaf-dark ring-1 ring-green-200 hover:bg-leaf-light"
                     }`}
                   >
@@ -275,7 +275,7 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
               <Link
                 key={x}
                 href={searchHref(raw, { extra: x, page: null })}
-                className={`flex min-h-10 items-center rounded-full px-3 font-bold ${raw.extra === x ? "bg-leaf text-white" : "bg-leaf-light text-leaf-dark"}`}
+                className={`flex min-h-10 items-center rounded-lg px-3 py-1.5 leading-snug font-bold ${raw.extra === x ? "bg-leaf text-white" : "bg-leaf-light text-leaf-dark"}`}
               >
                 ＋{x}kg まで
               </Link>

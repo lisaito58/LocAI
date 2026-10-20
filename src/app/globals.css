@@ -59,8 +59,9 @@ body {
   @apply rounded-3xl border border-green-100 bg-leaf-light/60 p-5;
 }
 
+/* ボタン：角丸の長方形。文字が折り返しても余白を保ち、内容に合わせて高さが伸びる */
 @utility btn {
-  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 py-2.5 text-center font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex h-auto min-h-11 max-w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-center leading-snug font-bold break-words whitespace-normal transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 @utility btn-primary {
@@ -76,7 +77,12 @@ body {
 }
 
 @utility btn-sm {
-  @apply min-h-10 px-4 py-1.5 text-sm;
+  @apply min-h-10 rounded-lg px-3 py-2 text-sm;
+}
+
+/* 補助の操作（リセットなど）：枠だけの控えめなボタン */
+@utility btn-ghost {
+  @apply btn border border-gray-400 bg-white font-medium text-gray-800 hover:bg-gray-50;
 }
 
 @utility input {

@@ -67,7 +67,7 @@ export function Onboarding({ role, mode }: { role: "FARMER" | "RESTAURANT"; mode
         setOpen(false);
       });
     } else {
-      router.push(role === "FARMER" ? "/farm" : "/shop");
+      router.push(role === "FARMER" ? "/farm" : role === "RESTAURANT" ? "/shop" : "/");
     }
   }
   if (!open) return null;
@@ -93,6 +93,7 @@ export function Onboarding({ role, mode }: { role: "FARMER" | "RESTAURANT"; mode
         </h2>
         <p className="text-base leading-relaxed">{s.body}</p>
         {s.note && <p className="rounded-2xl bg-amber-50 px-3 py-2 text-sm font-bold text-amber-900">⚠️ {s.note}</p>}
+        {mode === "first" && last && <p className="text-sm text-gray-700">あとから「☰ メニュー」→「使い方・FAQ」でいつでも見直せます。</p>}
       </div>
       {/* 現在位置（色だけでなく形でも分かるように） */}
       <ol className="flex justify-center gap-2" aria-hidden>

@@ -16,6 +16,8 @@ type Initial = {
   city: string;
   addressLine: string;
   contactPhone: string;
+  postalCode: string;
+  mapVisible: boolean;
   mainItems: string;
   commitment: string;
   introduction: string;
@@ -62,7 +64,19 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
         <Field label="農園名（デモでは架空の名前）" required errors={e?.farmName}>
           <TextInput name="farmName" defaultValue={initial?.farmName} required maxLength={50} />
         </Field>
-        <AddressFields initial={{ prefecture: initial?.prefecture ?? "京都府", city: initial?.city }} errors={e} showAddressLine={false} />
+        <AddressFields initial={{ prefecture: initial?.prefecture ?? "京都府", city: initial?.city, postalCode: initial?.postalCode }} errors={e} showAddressLine={false} />
+        <div className="rounded-2xl border-2 border-green-100 p-3">
+          <label className="flex min-h-11 items-start gap-2 font-bold">
+            <input type="checkbox" name="mapVisible" defaultChecked={initial?.mapVisible ?? true} className="mt-1 size-5 accent-green-700" />
+            <span>
+              お店の「地図で探す」に農園を表示する
+              <ReqMark optional />
+            </span>
+          </label>
+          <p className="hint mt-1">
+            地図には、上で選んだ市区町村の「おおよその位置」（代表点）だけを表示します。番地・建物名・引き取り場所は表示しません。表示しない場合も、一覧からは探せます。
+          </p>
+        </div>
         <Field
           label="主な品目"
           optional

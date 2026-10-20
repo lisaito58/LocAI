@@ -47,7 +47,7 @@ export function AppNav({ role, badge }: { role: "FARMER" | "RESTAURANT"; badge: 
               key={it.href}
               href={it.href}
               aria-current={active ? "page" : undefined}
-              className={`relative flex min-h-11 items-center gap-1.5 rounded-full px-4 font-bold ${
+              className={`relative flex min-h-11 items-center gap-1.5 rounded-lg px-4 font-bold ${
                 active ? "bg-leaf text-white" : "text-leaf-dark hover:bg-leaf-light"
               }`}
             >

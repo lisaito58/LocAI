@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isValidCity } from "@/lib/data/municipalities";
 import { blankToUndefined, PREFECTURES } from "./listing";
 import { checkPhone } from "./phone";
+import { checkPostal } from "./postal";
 
 const required = (label: string, max: number) =>
   z.string().trim().min(1, `${label}を入力してください`).max(max, `${label}は${max}文字以内で入力してください`);
@@ -15,6 +16,19 @@ const optional = (max: number) =>
     .transform((v) => (v ? v : null));
 
 const base = {
+  // 郵便番号は任意。入っていれば整えてから保存する（住所の実在確認ではない）
+  postalCode: z
+    .string()
+    .optional()
+    .transform((v, ctx) => {
+      if (!v || !v.trim()) return null;
+      const r = checkPostal(v);
+      if (!r.ok) {
+        ctx.addIssue({ code: "custom", message: r.message });
+        return z.NEVER;
+      }
+      return r.display;
+    }),
   prefecture: z.enum(PREFECTURES, "都道府県を選んでください"),
   city: z.string().trim().min(1, "市区町村を選んでください"),
   addressLine: required("番地・建物名", 100),
@@ -52,6 +66,7 @@ export const farmerProfileSchema = z.object({
   introduction: optional(500),
   responseGuide: optional(50),
   availableWeekdays: z.array(z.enum(WEEKDAYS)).max(7),
+  mapVisible: z.preprocess((v) => v === "on", z.boolean()),
   paymentConfirmGuideHours: z.preprocess(
     blankToUndefined,
     z.coerce

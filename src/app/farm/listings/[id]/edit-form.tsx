@@ -15,7 +15,7 @@ export function ListingEditForm({
   const e = state?.fieldErrors;
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid items-start gap-3 sm:grid-cols-2">
         <Field label="単価（円/kg）" errors={e?.unitPriceYenPerKg}>
           <input name="unitPriceYenPerKg" className="input" inputMode="numeric" defaultValue={initial.unitPriceYenPerKg} />
         </Field>

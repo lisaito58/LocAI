@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
-import { TextSizeToggle } from "@/components/text-size-toggle";
+import { AppMenu } from "@/components/app-menu";
 import { farmerBadge, getFarmerTodo, getShopTodo, shopBadge } from "@/lib/domain/todo";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
@@ -33,17 +33,12 @@ export async function SiteHeader() {
           LocAI
         </Link>
         {user ? <AppNav role={user.role} badge={badge} /> : <span className="flex-1" />}
-        <TextSizeToggle />
         {!user && (
-          <nav className="flex gap-2 text-sm">
-            <Link href="/login" className="btn-secondary btn-sm">
-              ログイン
-            </Link>
-            <Link href="/signup" className="btn-primary btn-sm max-sm:hidden">
-              新規登録
-            </Link>
-          </nav>
+          <Link href="/login" className="btn-secondary btn-sm shrink-0 max-[359px]:hidden">
+            ログイン
+          </Link>
         )}
+        <AppMenu role={user?.role ?? null} />
       </div>
     </header>
   );

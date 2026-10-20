@@ -43,11 +43,13 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
 }
 
 export function PrefectureSelect({
+  id,
   name,
   defaultValue,
   value,
   onChange,
 }: {
+  id?: string;
   name: string;
   defaultValue?: string;
   value?: string;
@@ -55,6 +57,7 @@ export function PrefectureSelect({
 }) {
   return (
     <select
+      id={id}
       name={name}
       {...(value !== undefined ? { value } : { defaultValue: defaultValue ?? "" })}
       onChange={onChange ? (e) => onChange(e.target.value) : undefined}

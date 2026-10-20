@@ -33,6 +33,7 @@ async function Content() {
               city: profile.city,
               addressLine: profile.addressLine,
               contactPhone: profile.contactPhone,
+              postalCode: profile.postalCode ?? "",
             }
           }
         />
@@ -42,7 +43,7 @@ async function Content() {
         <Link href="/shop/orders" className="btn-secondary justify-start">
           🧺 注文・取引の一覧を見る
         </Link>
-        <Link href="/guide" className="btn-secondary justify-start">
+        <Link href="/help" className="btn-secondary justify-start">
           📖 使い方を見る
         </Link>
       </section>

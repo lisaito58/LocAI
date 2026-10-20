@@ -21,13 +21,13 @@ export function TextSizeToggle() {
     listeners.forEach((fn) => fn());
   }
   return (
-    <div role="group" aria-label="文字の大きさ" className="flex shrink-0 items-center rounded-full border-2 border-green-100 bg-white p-0.5 text-sm font-bold">
-      <span className="px-2 text-gray-700 max-sm:sr-only">文字</span>
+    <div role="group" aria-label="文字の大きさ" className="flex w-full items-center gap-1 rounded-xl border-2 border-green-200 bg-white p-1 font-bold">
+      <span className="sr-only">文字</span>
       <button
         type="button"
         aria-pressed={!large}
         onClick={() => set(false)}
-        className={`min-h-10 rounded-full px-3 ${!large ? "bg-leaf text-white" : "text-leaf-dark"}`}
+        className={`min-h-10 flex-1 rounded-lg px-3 ${!large ? "bg-leaf text-white" : "text-leaf-dark"}`}
       >
         標準
       </button>
@@ -35,7 +35,7 @@ export function TextSizeToggle() {
         type="button"
         aria-pressed={large}
         onClick={() => set(true)}
-        className={`min-h-10 rounded-full px-3 ${large ? "bg-leaf text-white" : "text-leaf-dark"}`}
+        className={`min-h-10 flex-1 rounded-lg px-3 ${large ? "bg-leaf text-white" : "text-leaf-dark"}`}
       >
         大きめ
       </button>

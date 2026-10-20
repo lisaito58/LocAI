@@ -101,7 +101,7 @@ export function SearchForm({ initial, prefecture, sort }: { initial: SearchValue
               .map((m) => (
                 <label
                   key={m}
-                  className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border-2 border-green-200 bg-white px-4 font-bold has-checked:border-leaf has-checked:bg-leaf has-checked:text-white has-focus-visible:ring-4 has-focus-visible:ring-green-200"
+                  className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border-2 border-green-200 bg-white px-4 font-bold has-checked:border-leaf has-checked:bg-leaf has-checked:text-white has-focus-visible:ring-4 has-focus-visible:ring-green-200"
                 >
                   <input type="radio" name="mode" className="sr-only" checked={v.mode === m} onChange={() => set("mode", m)} />
                   {v.mode === m ? "● " : "○ "}
