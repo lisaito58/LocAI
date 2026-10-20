@@ -5,8 +5,9 @@
 // 2026年10月20日に1回だけ取得して作成。地図表示のたびに外部へ問い合わせない。
 import data from "./municipality-points.json";
 
-const POINTS: Record<string, Record<string, [number, number]>> = data as Record<string, Record<string, [number, number]>>;
+const POINTS: Record<string, Record<string, number[]>> = data;
 
 export function cityPoint(prefecture: string, city: string): [number, number] | null {
-  return POINTS[prefecture]?.[city] ?? null;
+  const p = POINTS[prefecture]?.[city];
+  return p && p.length === 2 ? [p[0], p[1]] : null;
 }
