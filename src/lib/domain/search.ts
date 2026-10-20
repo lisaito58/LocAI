@@ -61,6 +61,7 @@ export type Candidate = {
   saleTargetAt: Date | null;
   saleTargetReachable: boolean; // いま申し込めば、回答猶予を含めて販売希望期限までに合意できる見込みがある
   photoUrl: string | null;
+  photoIsReference: boolean; // テスト用の参考画像（実物写真ではない）
   isNewFarmer: boolean;
   isRepeat: boolean;
 };
@@ -113,7 +114,7 @@ export async function searchListings(db: Db, restaurantUserId: string, p: Search
       farmer: {
         select: { id: true, farmName: true, city: true, prefecture: true, mapVisible: true, responseGuide: true, user: { select: { createdAt: true } } },
       },
-      photos: { orderBy: [{ publishRound: "desc" }, { createdAt: "asc" }], take: 1, select: { url: true } },
+      photos: { orderBy: [{ publishRound: "desc" }, { createdAt: "asc" }], take: 1, select: { url: true, referenceCredit: true } },
       deliveryOptions: {
         where: { active: true, ...(p.deliveryMethod !== "ANY" && { method: p.deliveryMethod }) },
         include: {
@@ -219,6 +220,7 @@ export async function searchListings(db: Db, restaurantUserId: string, p: Search
       saleTargetAt: l.saleTargetAt,
       saleTargetReachable: isSaleTargetReachable(l, now),
       photoUrl: l.photos[0]?.url ?? null,
+      photoIsReference: Boolean(l.photos[0]?.referenceCredit),
       isNewFarmer: l.farmer.user.createdAt > newSince,
       isRepeat: repeatFarmers.has(l.farmer.id),
     };

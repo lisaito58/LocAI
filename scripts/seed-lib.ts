@@ -31,6 +31,9 @@ export type FarmerSeed = {
     pickup?: boolean; // 引き取り（受け渡し時払い・0円・件数上限あり）も用意する
     onHandoverShipping?: boolean; // 宅配を前払いでなく受け渡し時払いにする
     saleTargetHours?: number; // 早めに販売したい：いまから何時間後を販売希望期限にするか
+    acceptHours?: number; // 受付期限：いまから何時間後か（省略時は4日後）
+    responseHours?: number; // 回答の最終期限：いまから何時間後か（省略時は受付期限の24時間後）
+    trial?: { setKg: number; priceYen: number; count: number }; // お試し販売（任意）
   }[];
 };
 
@@ -104,9 +107,20 @@ export async function seedAccounts(opts: {
   return { listingCount };
 }
 
-// 出品を1件作る（受付期限は4日後、回答の最終期限は5日後、日程は6・7・9日後）
+// 出品を1件作る（省略時：受付期限は4日後、回答の最終期限は5日後、日程は6・7・9日後）
+// 期限の順番は「受付期限 < 回答の最終期限 < 最初の受け渡し日」を守る
 export async function createSeedListing(farmerId: string, l: ListingSeed, dataLabel: string, now: Date) {
   const h = (hours: number) => new Date(now.getTime() + hours * 3_600_000);
+  const acceptH = l.acceptHours ?? 24 * 4;
+  const responseH = l.responseHours ?? acceptH + 24;
+  if (!(acceptH < responseH) || l.graceHours > responseH) throw new Error(`${l.itemName}：期限の設定が正しくありません`);
+  if (l.saleTargetHours && !(l.saleTargetHours > l.graceHours && l.saleTargetHours <= responseH)) throw new Error(`${l.itemName}：販売希望期限が正しくありません`);
+  const firstDay = Math.ceil(responseH / 24) + 1; // 回答の最終期限の翌日以降
+  // 受け渡し日時は、その日の日本時間のきりのよい時刻（宅配10時・引き取り12時）にそろえる
+  const jstAt = (days: number, hour: number) => {
+    const d = new Date(now.getTime() + days * 86_400_000 + 9 * 3_600_000);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour - 9));
+  };
   const listing = await prisma.listing.create({
     data: {
       farmerId,
@@ -120,11 +134,12 @@ export async function createSeedListing(farmerId: string, l: ListingSeed, dataLa
       minOrderGrams: Math.round(l.minKg * 1000),
       orderStepGrams: Math.round(l.stepKg * 1000),
       responseGraceMinutes: l.graceHours * 60,
-      acceptDeadlineAt: h(24 * 4),
-      responseDeadlineAt: h(24 * 5),
+      acceptDeadlineAt: h(acceptH),
+      responseDeadlineAt: h(responseH),
       earlySale: Boolean(l.saleTargetHours),
       saleTargetAt: l.saleTargetHours ? h(l.saleTargetHours) : null,
       publishedAt: now,
+      ...(l.trial && { trialEnabled: true, trialSetGrams: Math.round(l.trial.setKg * 1000), trialSetPriceYen: l.trial.priceYen, trialSetCount: l.trial.count }),
     },
   });
   const shipping = await prisma.deliveryOption.create({
@@ -133,13 +148,13 @@ export async function createSeedListing(farmerId: string, l: ListingSeed, dataLa
       method: "SHIPPING",
       paymentTiming: l.onHandoverShipping ? "ON_HANDOVER" : "PREPAID",
       paymentMethod: l.onHandoverShipping ? "CASH" : "BANK_TRANSFER",
-      prepayDeadlineAt: l.onHandoverShipping ? null : h(24 * 5 + 6),
+      prepayDeadlineAt: l.onHandoverShipping ? null : h(responseH + 6),
       paymentConfirmGuideHours: 24,
       shippingRates: { create: [...SHIPPING_BANDS("大阪府"), ...SHIPPING_BANDS("京都府")] },
     },
   });
   await prisma.scheduleSlot.createMany({
-    data: [6, 7, 9].map((d) => ({ listingId: listing.id, deliveryOptionId: shipping.id, startsAt: h(24 * d) })),
+    data: [0, 1, 3].map((d) => ({ listingId: listing.id, deliveryOptionId: shipping.id, startsAt: jstAt(firstDay + d, 10) })),
   });
   if (l.pickup) {
     const pickup = await prisma.deliveryOption.create({
@@ -155,7 +170,7 @@ export async function createSeedListing(farmerId: string, l: ListingSeed, dataLa
       },
     });
     await prisma.scheduleSlot.createMany({
-      data: [6, 8].map((d) => ({ listingId: listing.id, deliveryOptionId: pickup.id, startsAt: h(24 * d + 2), capacity: 3 })),
+      data: [0, 2].map((d) => ({ listingId: listing.id, deliveryOptionId: pickup.id, startsAt: jstAt(firstDay + d, 12), capacity: 3 })),
     });
   }
 }

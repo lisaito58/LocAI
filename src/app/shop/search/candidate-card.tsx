@@ -25,8 +25,11 @@ export function CandidateCard({
     <article className="card flex flex-col gap-3 p-4 sm:flex-row">
       <Link href={href} className="relative flex h-40 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-leaf-light text-6xl sm:size-36">
         {c.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={c.photoUrl} alt={`${c.itemName}の実物写真`} className="size-full object-cover" />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={c.photoUrl} alt={`${c.itemName}の${c.photoIsReference ? "参考画像" : "実物写真"}`} className="size-full object-cover" />
+            {c.photoIsReference && <span className="absolute bottom-1.5 left-1.5 rounded-md bg-white/90 px-1.5 text-xs font-bold text-gray-800">参考画像</span>}
+          </>
         ) : (
           <span role="img" aria-label="写真なし">
             {itemEmoji(c.itemName)}

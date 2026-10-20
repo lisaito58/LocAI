@@ -183,6 +183,9 @@ export async function draftIntroduction(input: IntroInput) {
     input,
     introJsonSchema,
     introSchema,
+    SYSTEM_RULES,
+    // 紹介文の下書きは検索・注文とは別の任意機能なので、長めに待つ
+    25_000,
   );
   return out?.draft ?? null;
 }

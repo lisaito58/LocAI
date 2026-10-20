@@ -34,7 +34,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
   const listing = await prisma.listing.findFirst({
     where: { id, farmerId: profile.id },
     include: {
-      photos: { orderBy: [{ publishRound: "desc" }, { createdAt: "asc" }], select: { url: true, takenOn: true, publishRound: true } },
+      photos: { orderBy: [{ publishRound: "desc" }, { createdAt: "asc" }], select: { url: true, takenOn: true, publishRound: true, referenceCredit: true } },
       deliveryOptions: {
         where: { active: true },
         include: { shippingRates: { orderBy: [{ prefecture: "asc" }, { minGramsExclusive: "asc" }] }, scheduleSlots: { orderBy: { startsAt: "asc" } } },
@@ -90,7 +90,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
         <div className="flex size-40 shrink-0 items-center justify-center overflow-hidden rounded-3xl bg-leaf-light text-6xl">
           {listing.photos[0] ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={listing.photos[0].url} alt={`${listing.itemName}の実物写真`} className="size-full object-cover" />
+            <img src={listing.photos[0].url} alt={`${listing.itemName}の${listing.photos[0].referenceCredit ? "参考画像" : "実物写真"}`} className="size-full object-cover" />
           ) : (
             itemEmoji(listing.itemName)
           )}
@@ -100,7 +100,12 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
             <span className={`badge ${accepting ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}>
               {accepting ? "🟢 受付中" : listing.status === "CLOSED" ? "⏸ 受付終了" : "⌛ 受付期限後"}
             </span>
-            {listing.photos[0] && <span className="badge bg-leaf-light text-leaf-dark">📷 撮影 {listing.photos[0].takenOn.toISOString().slice(0, 10)}</span>}
+            {listing.photos[0] &&
+              (listing.photos[0].referenceCredit ? (
+                <span className="badge bg-gray-100 text-gray-800">🖼️ テスト用の参考画像（実物ではありません）</span>
+              ) : (
+                <span className="badge bg-leaf-light text-leaf-dark">📷 撮影 {listing.photos[0].takenOn.toISOString().slice(0, 10)}</span>
+              ))}
           </div>
           <h1 className="text-2xl font-bold text-leaf-dark">
             {itemEmoji(listing.itemName)} {listing.itemName}
