@@ -211,6 +211,9 @@ model ListingPhoto {
   storageKey         String
   takenOn            DateTime @db.Date // 撮影日
   selfTakenConfirmed Boolean // 本人撮影の確認
+  // テスト・デモ用の参考画像（実物写真ではない）。値があれば画面に「参考画像」と出典を表示する。通常の出品では使わない
+  referenceCredit    String? // 撮影者・ライセンス（例：「山田 / CC BY-SA 4.0 / Wikimedia Commons」）
+  referenceSourceUrl String? // 出典ページのURL
   createdAt          DateTime @default(now()) @db.Timestamptz(3)
 
   listing Listing    @relation(fields: [listingId], references: [id], onDelete: Cascade)

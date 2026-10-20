@@ -61,7 +61,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
       farmer: {
         select: { farmName: true, prefecture: true, city: true, introduction: true, commitment: true, mainItems: true, responseGuide: true, availableWeekdays: true },
       },
-      photos: { orderBy: [{ publishRound: "desc" }, { createdAt: "asc" }], select: { id: true, url: true, takenOn: true, publishRound: true } },
+      photos: { orderBy: [{ publishRound: "desc" }, { createdAt: "asc" }], select: { id: true, url: true, takenOn: true, publishRound: true, referenceCredit: true, referenceSourceUrl: true } },
       deliveryOptions: {
         where: { active: true },
         include: {
@@ -176,14 +176,28 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
           <div className="flex aspect-square items-center justify-center overflow-hidden rounded-3xl bg-leaf-light text-7xl">
             {currentPhotos[0] ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={currentPhotos[0].url} alt={`${listing.itemName}の実物写真`} className="size-full object-cover" />
+              <img src={currentPhotos[0].url} alt={`${listing.itemName}の${currentPhotos[0].referenceCredit ? "参考画像" : "実物写真"}`} className="size-full object-cover" />
             ) : (
               itemEmoji(listing.itemName)
             )}
           </div>
-          {currentPhotos[0] && (
-            <p className="text-center text-xs text-gray-700">📷 農家さんが撮影した実物写真（撮影日 {formatDateOnly(currentPhotos[0].takenOn)}）</p>
-          )}
+          {currentPhotos[0] &&
+            (currentPhotos[0].referenceCredit ? (
+              <p className="text-xs text-gray-700">
+                🖼️ <strong>テスト用の参考画像</strong>（実物の写真ではありません）
+                <br />
+                出典：
+                {currentPhotos[0].referenceSourceUrl ? (
+                  <a href={currentPhotos[0].referenceSourceUrl} target="_blank" rel="noopener noreferrer" className="link break-all">
+                    {currentPhotos[0].referenceCredit}
+                  </a>
+                ) : (
+                  currentPhotos[0].referenceCredit
+                )}
+              </p>
+            ) : (
+              <p className="text-center text-xs text-gray-700">📷 農家さんが撮影した実物写真（撮影日 {formatDateOnly(currentPhotos[0].takenOn)}）</p>
+            ))}
         </div>
         <div className="flex flex-1 flex-col gap-2">
           <h1 className="text-2xl font-bold text-leaf-dark">
