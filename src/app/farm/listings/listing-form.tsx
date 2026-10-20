@@ -489,9 +489,10 @@ export function ListingForm({ mode, sourceId, initial, farmPrefecture, currentAv
 
               <div className="rounded-2xl bg-leaf-light/40 p-3">
                 <div className="label mb-1">
-                  📅 受け渡し日程
+                  📅 お店が受け取る予定の日時
                   <ReqMark required />
                 </div>
+                <p className="hint mb-2">宅配の場合も、発送日ではなく「お店に届く予定の日時」を入れてください。お店は使用日までに受け取れる日程から選びます。</p>
                 <div className="flex flex-col gap-2">
                   {o.slots.map((s, j) => {
                     const upd = (patch: Partial<typeof s>) => setOption(i, { slots: o.slots.map((x, k) => (k === j ? { ...x, ...patch } : x)) });

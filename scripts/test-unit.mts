@@ -156,3 +156,17 @@ test("同じ食材の判定は、表記の揺れをそろえた完全一致だ�
   assert.notEqual(itemKey("賀茂茄子"), itemKey("賀茂なす")); // 似ていても別の食材
   assert.notEqual(itemKey("トマト"), itemKey("ミニトマト"));
 });
+
+import { itemMatches } from "../src/lib/domain/item-search";
+
+test("食材名の表記ゆれ：ひらがな・カタカナ・漢字の読みをそろえて検索できる", () => {
+  for (const q of ["とうがらし", "トウガラシ", "唐辛子", "ﾄｳｶﾞﾗｼ"]) assert.ok(itemMatches("万願寺唐辛子", q), q);
+  for (const q of ["ねぎ", "ネギ", "葱"]) {
+    assert.ok(itemMatches("九条ねぎ", q), q);
+    assert.ok(itemMatches("九条葱", q), q);
+  }
+  for (const q of ["なす", "ナス", "茄子"]) assert.ok(itemMatches("賀茂茄子", q), q);
+  assert.ok(itemMatches("玉ねぎ", "玉葱"));
+  assert.ok(!itemMatches("トマト", "なす"), "別の野菜は一致しない");
+  assert.ok(!itemMatches("きゅうり", ""), "空の検索語は一致させない");
+});

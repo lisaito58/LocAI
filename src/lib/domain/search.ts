@@ -4,6 +4,7 @@
 // 申込前の確認（数量・在庫・送料込み総額・地域・日程・回答期限）は orders.ts の quoteInTx で必ず行う。
 import type { DeliveryMethod, PaymentMethod, PaymentTiming } from "@/generated/prisma/enums";
 import { SERVICE_PREFECTURES } from "@/lib/validation/listing";
+import { itemMatches } from "./item-search";
 import { fairOrder } from "./ordering";
 import { expireDueOrders } from "./orders";
 import { findShippingFee } from "./shipping";
@@ -75,19 +76,8 @@ export type SearchResult = {
 
 const NEW_FARMER_DAYS = 30;
 
-function normalize(s: string) {
-  // カタカナをひらがなにそろえ、空白を除く
-  return s
-    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
-    .replace(/\s/g, "")
-    .toLowerCase();
-}
-
-export function itemMatches(itemName: string, query: string) {
-  const a = normalize(itemName);
-  const b = normalize(query);
-  return b.length > 0 && (a.includes(b) || b.includes(a));
-}
+// 食材名の照合は表記ゆれ（ひらがな・カタカナ・よく使う漢字）をそろえて行う
+export { itemMatches };
 
 // 早めに販売したい野菜：いま申し込めば、回答猶予を含めて販売希望期限までに合意できる見込みがあるか
 export function isSaleTargetReachable(l: { earlySale: boolean; saleTargetAt: Date | null; responseGraceMinutes: number }, now: Date) {

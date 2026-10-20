@@ -248,6 +248,7 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
           ) : (
             <CalmNotice title="条件に合う出品はありませんでした">
               <p>数量・予算・受け取り日などの条件を変えて、もう一度探してみてください。</p>
+              <p className="text-sm">いま適用中の条件は、上の「いま適用中の条件」に表示しています。数量・使用日・追加条件を外すと、候補が増えることがあります。</p>
               <p className="text-sm">いま受付中の出品は全部で {result.openCount}件あります。</p>
               <div className="flex flex-wrap gap-2">
                 <EditSearchButton />

@@ -83,15 +83,28 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
   const by = q.by ?? "";
   const useEnd = /^\d{4}-\d{2}-\d{2}$/.test(use) ? endOfJstDay(use) : null;
 
-  const choices = listing.deliveryOptions.flatMap((o) =>
-    o.scheduleSlots
-      .filter((s) => !useEnd || s.startsAt < useEnd)
-      .map((s) => ({
+  // 受け取り日程の選択肢（農家が登録した実際の日程だけ）
+  //   通常の候補：使用日の3日前から使用日まで（目安。保存期間・鮮度の保証ではない）
+  //   それより前：「前の日程も表示する」を選んだときだけ
+  //   使用日より後：候補に入れない（使用日を変えると選べる）。申込時もサーバーで確認する
+  const useStart = useEnd ? new Date(useEnd.getTime() - 86_400_000) : null;
+  const nearFrom = useStart ? new Date(useStart.getTime() - 3 * 86_400_000) : null;
+  const showEarly = q.early === "1";
+  const allSlots = listing.deliveryOptions.flatMap((o) =>
+    o.scheduleSlots.map((s) => {
+      const full = s.capacity !== null && s.usedCount >= s.capacity;
+      const sameDay = useStart && useEnd ? s.startsAt >= useStart && s.startsAt < useEnd : false;
+      return {
         value: `${o.id}:${s.id}`,
-        label: `${DELIVERY_METHOD_LABELS[o.method]} ・ ${formatJst(s.startsAt)}${s.capacity !== null && s.usedCount >= s.capacity ? "（満枠）" : ""}`,
-        full: s.capacity !== null && s.usedCount >= s.capacity,
-      })),
+        startsAt: s.startsAt,
+        label: `${DELIVERY_METHOD_LABELS[o.method]} ・ ${formatJst(s.startsAt)}${sameDay ? "（使用日当日：時間に間に合うか確認）" : ""}${full ? "（満枠）" : ""}`,
+        full,
+      };
+    }),
   );
+  const nearChoices = useEnd && nearFrom ? allSlots.filter((c) => c.startsAt >= nearFrom && c.startsAt < useEnd) : [];
+  const earlyChoices = useEnd && nearFrom ? allSlots.filter((c) => c.startsAt < nearFrom) : [];
+  const laterCount = useEnd ? allSlots.filter((c) => c.startsAt >= useEnd).length : 0;
   const [optionId, slotId] = (q.choice ?? "").split(":");
 
   let quote: Awaited<ReturnType<typeof quoteOrder>> | null = null;
@@ -244,7 +257,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             <p className="hint">申し込む前に、下の条件をすべて入れて「合計と期限を確認する」を押してください。</p>
             <form className="grid gap-3 sm:grid-cols-2" action={`/shop/listings/${listing.id}#order`}>
               {Object.entries(q)
-                .filter(([k]) => !["purchaseKg", "purchase", "budget", "use", "by", "choice"].includes(k))
+                .filter(([k]) => !["purchaseKg", "purchase", "budget", "use", "by", "choice", "early"].includes(k))
                 .map(([k, v]) => (
                   <input key={k} type="hidden" name={k} value={v} />
                 ))}
@@ -260,20 +273,56 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
               <Labeled label="⏰ 仕入れ確定希望時刻">
                 <input name="by" type="datetime-local" className="input" defaultValue={by} required />
               </Labeled>
-              <Labeled label="📅 受け渡し方法と日程（使用日以前）">
-                <select name="choice" className="input" defaultValue={q.choice ?? ""} required>
-                  <option value="" disabled>
-                    選んでください
-                  </option>
-                  {choices.map((c) => (
-                    <option key={c.value} value={c.value} disabled={c.full}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </Labeled>
-              <div className="flex items-end">
-                <button className="btn-secondary w-full">🧮 合計と期限を確認する</button>
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                {!useEnd ? (
+                  <p className="rounded-xl bg-[#fbf0e6] px-3 py-2 text-sm text-[#3d3a37]">
+                    使用日を入れて下のボタンを押すと、使用日までに受け取れる日程が選べるようになります。
+                  </p>
+                ) : (
+                  <Labeled label="📅 受け取り方法と日程">
+                    <select name="choice" className="input" defaultValue={q.choice ?? ""} required>
+                      <option value="" disabled>
+                        選んでください
+                      </option>
+                      {nearChoices.length > 0 && (
+                        <optgroup label="使用日の3日前〜当日（目安）">
+                          {nearChoices.map((c) => (
+                            <option key={c.value} value={c.value} disabled={c.full}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {showEarly && earlyChoices.length > 0 && (
+                        <optgroup label="それより前の日程">
+                          {earlyChoices.map((c) => (
+                            <option key={c.value} value={c.value} disabled={c.full}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </Labeled>
+                )}
+                {useEnd && nearChoices.length === 0 && (
+                  <p className="text-sm">使用日の3日前〜当日に受け取れる日程はありません。</p>
+                )}
+                {useEnd && earlyChoices.length > 0 && (
+                  <label className="flex min-h-11 items-center gap-2 text-sm">
+                    <input type="checkbox" name="early" value="1" defaultChecked={showEarly} className="size-5 accent-green-700" />
+                    それより前の日程（{earlyChoices.length}件）も選択肢に表示する
+                  </label>
+                )}
+                {laterCount > 0 && (
+                  <p className="text-sm">使用日より後の日程が{laterCount}件あります。その日程で受け取りたい場合は、使用日を変えてもう一度確認してください。</p>
+                )}
+                <p className="hint">
+                  日程は農家さんが登録した「お店が受け取る予定の日時」です（宅配の場合も発送日ではありません）。届く時間は前後することがあるので、使う時間に間に合うかは相談欄で確認できます。3日前〜当日は目安で、保存できる期間や鮮度を保証するものではありません。
+                </p>
+              </div>
+              <div className="sm:col-span-2">
+                <button className="btn-secondary w-full">{useEnd ? "🧮 合計と期限を確認する" : "📅 受け取れる日程を表示する"}</button>
               </div>
             </form>
 
