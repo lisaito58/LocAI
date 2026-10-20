@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Next.js のテレメトリ設定など（手元専用）
 /cache
+
+# 地図ライブラリの作業用スクリプト（npm install 時に node_modules からコピー）
+/public/vendor

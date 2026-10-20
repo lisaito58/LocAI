@@ -166,7 +166,6 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
     areaMap.set(key, area);
   }
   const areas = [...areaMap.values()];
-  const mapCenter = prefecturePoint(result.prefecture) ?? areas[0]?.point ?? [34.99, 135.76];
   const prefecturePoints = SERVICE_PREFECTURES.map((name) => ({ name, point: prefecturePoint(name) })).filter(
     (x): x is { name: (typeof SERVICE_PREFECTURES)[number]; point: [number, number] } => x.point !== null,
   );
@@ -265,7 +264,7 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
             {hiddenOnMap > 0 && (
               <p className="text-sm text-gray-700">地図に位置を表示していない出品が {hiddenOnMap}件あります（「📋 一覧で見る」で表示されます）。</p>
             )}
-            <FarmMap areas={areas} center={mapCenter} prefectures={prefecturePoints} />
+            <FarmMap areas={areas} prefectures={prefecturePoints} />
           </>
         ) : (
           <>
