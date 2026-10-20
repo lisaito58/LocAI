@@ -54,6 +54,7 @@ const orderSchema = z.object({
   idempotencyKey: z.string().uuid(),
   expectedTotalYen: z.coerce.number().int(),
   inquiryId: z.string().optional(),
+  isTrial: z.literal("1").optional(),
   agree: z.literal("on", "内容と期限を確認したら、チェックを入れてください"),
 });
 
@@ -83,6 +84,7 @@ export async function submitOrder(_prev: OrderFormState, formData: FormData): Pr
     idempotencyKey: d.idempotencyKey,
     expectedTotalYen: d.expectedTotalYen,
     inquiryId: d.inquiryId || undefined,
+    isTrial: d.isTrial === "1",
   });
   if (!r.ok) return { error: r.error };
   redirect(`/orders/${r.orderId}?done=${r.duplicate ? "duplicate" : "created"}`);

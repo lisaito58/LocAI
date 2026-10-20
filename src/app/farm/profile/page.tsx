@@ -39,6 +39,7 @@ async function Content() {
             contactPhone: profile.contactPhone,
             postalCode: profile.postalCode ?? "",
             mapVisible: profile.mapVisible,
+            trialDailyLimit: profile.trialDailyLimit,
             mainItems: profile.mainItems ?? "",
             commitment: profile.commitment ?? "",
             introduction: profile.introduction ?? "",

@@ -69,6 +69,10 @@ export const farmerProfileSchema = z.object({
   responseGuide: optional(50),
   availableWeekdays: z.array(z.enum(WEEKDAYS)).max(7),
   mapVisible: z.preprocess((v) => v === "on", z.boolean()),
+  trialDailyLimit: z.preprocess(
+    blankToUndefined,
+    z.coerce.number("お試しの件数は数字で入力してください").int("お試しの件数は整数で入力してください").min(0).max(100, "お試しの件数は100件以下にしてください").optional(),
+  ).transform((v) => v ?? null),
   paymentConfirmGuideHours: z.preprocess(
     blankToUndefined,
     z.coerce

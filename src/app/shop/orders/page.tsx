@@ -142,6 +142,7 @@ async function Content() {
                   <span>{formatYen(o.totalYen)}</span>
                   <span className="badge bg-white">💴 {o.payment ? PAYMENT_STATUS_LABELS[o.payment.status] : "-"}</span>
                   <span className="badge bg-white">{o.fulfillment?.buyerReceivedAt ? "🧺 受取済み" : o.fulfillment?.farmerSentAt ? "🚚 発送済み" : "📦 受け渡し前"}</span>
+                  {o.isTrial && <span className="badge bg-orange-100 text-orange-900">🧺 お試し</span>}
                   {o.needsDiscussion && <span className="badge bg-red-100 text-red-700">🚩 要相談</span>}
                   <span className="ml-auto text-xs">受け渡し {formatJst(o.snapScheduleStartsAt)}</span>
                 </Link>

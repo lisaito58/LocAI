@@ -108,10 +108,23 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
   const [optionId, slotId] = (q.choice ?? "").split(":");
 
   let quote: Awaited<ReturnType<typeof quoteOrder>> | null = null;
-  const grams = kgTextToGrams(purchaseKg);
+  // お試しセット（任意）：残りセット数と、この店が使えるか（同じ農家につき1回）
+  const ACTIVE = ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT", "CONFIRMED"] as const;
+  const trialOffered = listing.trialEnabled && listing.trialSetGrams && listing.trialSetPriceYen && listing.trialSetCount !== null;
+  const trialUsed = trialOffered ? await prisma.order.count({ where: { listingId: listing.id, isTrial: true, status: { in: [...ACTIVE] } } }) : 0;
+  const trialRemaining = trialOffered ? Math.max(0, listing.trialSetCount! - trialUsed) : 0;
+  const myTrial = trialOffered
+    ? await prisma.order.findFirst({ where: { restaurantId: profile.id, farmerId: listing.farmerId, isTrial: true, status: { in: [...ACTIVE] } }, select: { status: true } })
+    : null;
+  const trialChoosable = Boolean(trialOffered && trialRemaining > 0 && !myTrial);
+  const isTrial = q.kind === "trial" && trialChoosable;
+
+  const grams = isTrial ? listing.trialSetGrams! : kgTextToGrams(purchaseKg);
   const byDate = jstLocalToDate(by);
   if (q.choice && grams !== null && byDate && budget && use) {
     quote = await quoteOrder(prisma, {
+      isTrial,
+      restaurantId: profile.id,
       listingId: listing.id,
       deliveryOptionId: optionId,
       scheduleSlotId: slotId,
@@ -145,6 +158,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         useDate: use,
         purchaseConfirmByAt: by,
         expectedTotalYen: String(quote.quote.totalYen),
+        ...(isTrial && { isTrial: "1" }),
         ...(q.inquiry && { inquiryId: q.inquiry }),
       }}
     />
@@ -260,14 +274,46 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         ) : (
           <>
             <p className="hint">申し込む前に、下の条件をすべて入れて「合計と期限を確認する」を押してください。</p>
-            <form className="grid gap-3 sm:grid-cols-2" action={`/shop/listings/${listing.id}#order`}>
+            {trialOffered && (
+              <div className="rounded-2xl border-2 border-orange-200 bg-orange-50/70 p-3">
+                <p className="font-bold text-orange-950">
+                  🧺 お試しセット：1セット{formatKg(listing.trialSetGrams!)}・商品代{formatYen(listing.trialSetPriceYen!)}（送料は別。残り{trialRemaining}セット）
+                </p>
+                <p className="text-sm">
+                  通常の注文の前に少量を試せます（農家さんの承認制・同じ農家さんにつき1回）。お試しを使わなくても、通常の注文はできます。
+                  {myTrial && (myTrial.status === "CONFIRMED" ? " この農家さんのお試しは利用済みです。" : " この農家さんのお試しを申込中です。")}
+                  {!myTrial && trialRemaining === 0 && " いまはお試しセットの残りがありません。"}
+                </p>
+              </div>
+            )}
+            <form className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2" action={`/shop/listings/${listing.id}#order`}>
               {Object.entries(q)
-                .filter(([k]) => !["purchaseKg", "purchase", "budget", "use", "by", "choice", "early"].includes(k))
+                .filter(([k]) => !["purchaseKg", "purchase", "budget", "use", "by", "choice", "early", "kind"].includes(k))
                 .map(([k, v]) => (
                   <input key={k} type="hidden" name={k} value={v} />
                 ))}
-              <Labeled label="⚖️ 購入する量（kg）">
-                <input name="purchaseKg" className="input" inputMode="decimal" defaultValue={purchaseKg} required />
+              {trialChoosable && (
+                <fieldset className="flex flex-col gap-2 sm:col-span-2">
+                  <legend className="label mb-1">申し込む内容</legend>
+                  <div className="flex flex-col gap-2 min-[420px]:flex-row">
+                    <label className="flex min-h-11 items-center gap-2 rounded-lg border-2 border-green-200 bg-white px-3 font-bold has-checked:border-leaf has-checked:bg-leaf-light">
+                      <input type="radio" name="kind" value="normal" defaultChecked={!isTrial} className="size-5 accent-green-700" />
+                      通常の注文
+                    </label>
+                    <label className="flex min-h-11 items-center gap-2 rounded-lg border-2 border-orange-200 bg-white px-3 font-bold has-checked:border-orange-500 has-checked:bg-orange-50">
+                      <input type="radio" name="kind" value="trial" defaultChecked={isTrial} className="size-5 accent-orange-600" />
+                      🧺 お試しセット（{formatKg(listing.trialSetGrams!)}）
+                    </label>
+                  </div>
+                </fieldset>
+              )}
+              <Labeled label="⚖️ 購入する量（kg）" required={!isTrial}>
+                <input name="purchaseKg" className="input" inputMode="decimal" defaultValue={purchaseKg} required={!isTrial} />
+                {trialChoosable && (
+                  <span className="hint">
+                    {isTrial ? `お試しセットでは、この欄は使わず1セット（${formatKg(listing.trialSetGrams!)}）で申し込みます。` : "お試しセットを選んだ場合は、1セットの量で申し込みます。"}
+                  </span>
+                )}
               </Labeled>
               <Labeled label="💴 送料込み予算（円）">
                 <input name="budget" className="input" inputMode="numeric" defaultValue={budget} required />
@@ -336,7 +382,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
               <div className="flex flex-col gap-3">
                 <div className="rounded-3xl border-2 border-leaf bg-leaf-light/40 p-4">
                   <div className="grid gap-2 text-sm min-[400px]:grid-cols-2 sm:grid-cols-4">
-                    <Info label="数量" value={formatKg(quote.quote.quantityGrams)} />
+                    <Info label={isTrial ? "数量（お試しセット）" : "数量"} value={formatKg(quote.quote.quantityGrams)} />
                     <Info label="商品代" value={formatYen(quote.quote.itemSubtotalYen)} />
                     <Info label="送料" value={quote.quote.shippingFeeYen === 0 ? "0円" : formatYen(quote.quote.shippingFeeYen)} />
                     <Info label="合計（アプリが計算）" value={formatYen(quote.quote.totalYen)} strong />
@@ -413,12 +459,12 @@ function Info({ label, value, strong }: { label: string; value: string; strong?:
 }
 
 // 申し込み前に必要な条件なので「必須」と表示する（一覧の閲覧では任意）
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+function Labeled({ label, children, required = true }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="label">
         {label}
-        <ReqMark required />
+        <ReqMark required={required} />
       </span>
       {children}
     </label>

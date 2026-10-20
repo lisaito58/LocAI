@@ -129,6 +129,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
       <section className="card flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={order.status} />
+          {order.isTrial && <span className="badge bg-orange-100 text-orange-900">🧺 お試しセット</span>}
           {order.hasConsultation && <span className="badge bg-sky-100 text-sky-800">💬 相談あり</span>}
           {order.needsDiscussion && <span className="badge bg-red-100 text-red-700">🚩 要相談</span>}
         </div>

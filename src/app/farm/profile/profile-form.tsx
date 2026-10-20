@@ -20,6 +20,7 @@ type Initial = {
   contactPhone: string;
   postalCode: string;
   mapVisible: boolean;
+  trialDailyLimit: number | null;
   mainItems: string;
   commitment: string;
   introduction: string;
@@ -176,6 +177,16 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
       <section className="card flex flex-col gap-4">
         <h2 className="section-title">🔒 取引相手にだけ表示する情報</h2>
         <PhoneField label="電話番号" defaultValue={initial?.contactPhone} serverErrors={e?.contactPhone} />
+        <div id="trial" className="scroll-mt-24">
+          <Field
+            label="お試し販売：1日に準備・発送・引き渡しできる件数"
+            optional
+            hint="受け渡し日ごとの上限です（申し込まれた日ではありません）。空欄なら上限なし、0なら受け付けません。お試し販売は出品ごとに設定します。"
+            errors={e?.trialDailyLimit}
+          >
+            <TextInput name="trialDailyLimit" type="number" min={0} max={100} defaultValue={initial?.trialDailyLimit ?? ""} />
+          </Field>
+        </div>
         <Field
           label="入金確認の目安（時間）"
           required

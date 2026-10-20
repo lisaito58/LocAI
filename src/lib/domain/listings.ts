@@ -253,6 +253,7 @@ export async function updateListing(
     description?: string;
     selfDeclaredFeatures?: string;
     conditionNote?: string;
+    sizeLabel?: string | null;
     earlySale?: boolean;
     saleTargetAt?: string;
   },
@@ -278,6 +279,7 @@ export async function updateListing(
         description: input.description ?? null,
         selfDeclaredFeatures: input.selfDeclaredFeatures ?? null,
         conditionNote: input.conditionNote ?? null,
+        ...(input.sizeLabel !== undefined && { sizeLabel: input.sizeLabel || null }),
         // 値下げしなくても「早めに販売したい」にできる。既存注文の条件は変えない
         ...(input.earlySale !== undefined && { earlySale: Boolean(sale.saleTargetAt), saleTargetAt: sale.saleTargetAt }),
       },
@@ -292,6 +294,63 @@ export async function closeListing(db: Db, input: { farmerUserId: string; listin
     const { listing } = await loadOwnListing(tx, input.listingId, input.farmerUserId);
     if (listing.status !== "PUBLISHED") return {};
     await tx.listing.update({ where: { id: listing.id }, data: { status: "CLOSED" } });
+    return {};
+  });
+}
+
+// 送料表の編集（受け渡し方法ごとに置き換える）。帯の重なり・抜け・開始位置を検証する。
+// 既存の購入希望・確定注文は申込時の送料表を保存しているので、この変更の影響を受けない。
+export async function updateShippingRates(
+  db: Db,
+  input: {
+    farmerUserId: string;
+    listingId: string;
+    deliveryOptionId: string;
+    rates: { prefecture: string; minGramsExclusive: number; maxGramsInclusive: number; feeYen: number }[];
+  },
+): Promise<Result<{ count: number }>> {
+  return runTx(db, async (tx) => {
+    const { listing } = await loadOwnListing(tx, input.listingId, input.farmerUserId);
+    const option = await tx.deliveryOption.findUnique({ where: { id: input.deliveryOptionId } });
+    if (!option || option.listingId !== listing.id || !option.active) fail("受け渡し方法が見つかりません");
+    if (option.method === "PICKUP") fail("引き取りの送料は0円で固定です");
+    if (input.rates.length === 0) fail("送料（無料の場合は0円）を1行以上登録してください");
+    for (const r of input.rates) {
+      if (!isServicePrefecture(r.prefecture)) fail(`送料の地域は${SERVICE_AREA_LABEL}から選んでください`);
+      if (r.maxGramsInclusive > LIMITS.maxQuantityGrams) fail("重量帯の上限は1,000kgまでにしてください");
+    }
+    const errors = validateShippingBands(input.rates);
+    if (errors.length) fail(errors.join("\n"));
+    await tx.shippingRate.deleteMany({ where: { deliveryOptionId: option.id } });
+    await tx.shippingRate.createMany({ data: input.rates.map((r) => ({ ...r, deliveryOptionId: option.id })) });
+    return { count: input.rates.length };
+  });
+}
+
+// お試し販売の設定（任意）。在庫は通常販売と共通で、設定してもアプリ用の在庫は増えない。
+export async function updateTrialSettings(
+  db: Db,
+  input: { farmerUserId: string; listingId: string; enabled: boolean; setGrams?: number; priceYen?: number; count?: number },
+): Promise<Result> {
+  return runTx(db, async (tx) => {
+    const { listing } = await loadOwnListing(tx, input.listingId, input.farmerUserId);
+    if (!input.enabled) {
+      await tx.listing.update({ where: { id: listing.id }, data: { trialEnabled: false } });
+      return {};
+    }
+    const { setGrams, priceYen, count } = input;
+    if (!setGrams || setGrams < LIMITS.minQuantityGrams) fail("1セットの数量は0.5kg以上にしてください");
+    if (setGrams > listing.totalGrams) fail("1セットの数量が出品総量を超えています");
+    if (!priceYen || priceYen < 1 || priceYen > LIMITS.maxYen) fail("1セットの価格を1〜100,000円で入力してください");
+    if (count === undefined || count < 0 || count > 999) fail("用意するセット数を0〜999で入力してください");
+    const used = await tx.order.count({
+      where: { listingId: listing.id, isTrial: true, status: { in: ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT", "CONFIRMED"] } },
+    });
+    if (count < used) fail(`すでに申込中・確定のお試しが${used}セットあるため、それより少なくはできません`);
+    await tx.listing.update({
+      where: { id: listing.id },
+      data: { trialEnabled: true, trialSetGrams: setGrams, trialSetPriceYen: priceYen, trialSetCount: count },
+    });
     return {};
   });
 }

@@ -41,6 +41,7 @@ export type Candidate = {
   description: string | null;
   selfDeclaredFeatures: string | null;
   sizeLabel: string | null;
+  trialOffered: boolean; // お試しセットを設定している（残り・利用可否は詳細画面で確認）
   unitPriceYenPerKg: number;
   minOrderGrams: number;
   orderStepGrams: number;
@@ -198,6 +199,7 @@ export async function searchListings(db: Db, restaurantUserId: string, p: Search
       description: l.description,
       selfDeclaredFeatures: l.selfDeclaredFeatures,
       sizeLabel: l.sizeLabel,
+      trialOffered: Boolean(l.trialEnabled && l.trialSetGrams && l.trialSetPriceYen && l.trialSetCount),
       unitPriceYenPerKg: l.unitPriceYenPerKg,
       minOrderGrams: l.minOrderGrams,
       orderStepGrams: l.orderStepGrams,

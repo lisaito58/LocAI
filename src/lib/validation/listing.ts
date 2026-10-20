@@ -142,6 +142,7 @@ export const listingEditSchema = z.object({
   description: optionalText(500),
   selfDeclaredFeatures: optionalText(500),
   conditionNote: optionalText(200),
+  sizeLabel: z.union([z.enum(SIZE_LABELS), z.literal("")]).optional(),
   earlySale: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   saleTargetAt: z.string().optional(),
 });
