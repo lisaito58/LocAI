@@ -104,7 +104,9 @@ model RestaurantProfile {
   prefecture       String
   city             String
   postalCode       String? // 郵便番号（住所入力の補助。番地・建物名は本人が入力）
+  town             String? // 町域（郵便番号検索で入る部分。本人が確認・修正できる）
   addressLine      String // 詳細住所（非公開）
+  building         String? // 建物名・部屋番号（任意）
   contactPhone     String // 連絡先（非公開）
   defaultBudgetYen Int?
   createdAt        DateTime @default(now()) @db.Timestamptz(3)
@@ -125,7 +127,10 @@ model FarmerProfile {
   city                     String
   postalCode               String? // 郵便番号（住所入力の補助）
   mapVisible               Boolean  @default(true) // 地図に「市区町村のおおよその位置」で表示するか（詳細住所は出さない）
+  town                     String? // 町域
   addressLine              String // 詳細住所（非公開）
+  building                 String? // 建物名・部屋番号（任意）
+  trialDailyLimit          Int? // お試し販売：1日に準備・発送・引き渡しできる件数の上限（受け渡し日ごと）
   contactPhone             String // 連絡先（非公開）
   introduction             String? // 公開する紹介文（AI下書きは本人確認後に保存）
   responseGuide            String? // プロフィールの回答目安（注文の入金確認目安とは別）
@@ -176,6 +181,10 @@ model Listing {
   responseGraceMinutes Int // 回答猶予
   acceptDeadlineAt     DateTime      @db.Timestamptz(3) // 受付期限（新規申込だけを止める）
   responseDeadlineAt   DateTime      @db.Timestamptz(3) // 回答最終期限
+  trialEnabled         Boolean       @default(false) // お試し販売を受け付けるか（任意）
+  trialSetGrams        Int? // お試し1セットの数量（通常の最低注文量とは別枠。在庫は通常販売と共通）
+  trialSetPriceYen     Int? // お試し1セットの商品価格（農家が決める）
+  trialSetCount        Int? // 用意するお試しセット数
   publishRound         Int           @default(1) // 再公開の回数（同一IDで再公開する）
   copiedFromListingId  String? // 出品複製の元（在庫は引き継がない）
   publishedAt          DateTime?     @db.Timestamptz(3)
@@ -329,6 +338,9 @@ model Order {
   scheduleSlotId      String
   hasConsultation     Boolean     @default(false) // 申込時に相談文を添えたか（「相談あり」として全件承認から外す）
 
+  isTrial              Boolean @default(false) // お試しセットの注文（数量・価格は固定。条件変更はしない）
+  snapTrialSetPriceYen Int? // お試しセットの商品価格（申込時）
+
   // --- 申込時のスナップショット（出品の変更・再公開で上書きしない） ---
   snapItemName                 String
   snapUnitPriceYenPerKg        Int
@@ -385,6 +397,7 @@ model Order {
   @@index([restaurantId, status])
   @@index([farmerId, status])
   @@index([status, deadlineAt])
+  @@index([farmerId, isTrial])
 }
 
 // 農家の条件変更案（1注文につき1回だけ）。単価・食材・数量増加は変更できない。
@@ -449,6 +462,8 @@ model ListingInquiry {
   status           InquiryStatus @default(OPEN)
   primaryOrderId   String? // 予備相談のときの第一候補の注文
   convertedOrderId String?       @unique // 新規注文に進んだときの注文
+  restaurantReadAt DateTime?     @db.Timestamptz(3) // 店が最後に読んだ時刻（未読の判定用）
+  farmerReadAt     DateTime?     @db.Timestamptz(3) // 農家が最後に読んだ時刻
   createdAt        DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
 
