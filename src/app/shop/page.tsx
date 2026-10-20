@@ -54,6 +54,9 @@ async function Content() {
             <Secured restaurantId={profile.id} />
           </Suspense>
           <Suspense fallback={null}>
+            <LossEntry restaurantId={profile.id} />
+          </Suspense>
+          <Suspense fallback={null}>
             <EarlySale userId={user.id} />
           </Suspense>
         </>
@@ -133,6 +136,33 @@ async function Secured({ restaurantId }: { restaurantId: string }) {
         ))
       )}
     </section>
+  );
+}
+
+// 仕入れの振り返り（任意）。受け取った注文のうち、振り返りが終わっていない件数を示す
+async function LossEntry({ restaurantId }: { restaurantId: string }) {
+  let pending: number | null = null;
+  try {
+    pending = await prisma.order.count({
+      where: {
+        restaurantId,
+        status: "CONFIRMED",
+        fulfillment: { buyerReceivedAt: { not: null } },
+        OR: [{ lossRecord: null }, { lossRecord: { status: "IN_USE" } }],
+      },
+    });
+  } catch {
+    pending = null;
+  }
+  return (
+    <TodoCard
+      href="/shop/loss"
+      emoji="📝"
+      label="仕入れの振り返り（任意）"
+      count={pending ?? 0}
+      sub={pending === null ? "件数を取得できませんでした" : "使い切れたかを記録すると、次の注文量の参考になります"}
+      tone="info"
+    />
   );
 }
 

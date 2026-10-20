@@ -399,6 +399,17 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
         </>
       )}
 
+      {/* 仕入れの振り返り（店本人だけ・任意） */}
+      {confirmed && !isFarmer && order.fulfillment?.buyerReceivedAt && (
+        <section className="card-soft flex flex-col gap-2">
+          <h2 className="section-title">📝 仕入れの振り返り（任意・あなただけに表示）</h2>
+          <p className="text-sm">使い切れたかを記録すると、次に同じ食材を注文するときの参考になります。</p>
+          <Link href={`/shop/loss/${order.id}`} className="btn-secondary self-start">
+            この注文の振り返りを記録・訂正する
+          </Link>
+        </section>
+      )}
+
       {/* 取引レビュー（受取済みの注文だけ。未着などの問題は相談欄・要相談から） */}
       {confirmed && (
         <section className="card flex flex-col gap-3">
