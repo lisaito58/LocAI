@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { closeListing, createListing, republishListing, updateListing } from "../src/lib/domain/listings";
 import * as orders from "../src/lib/domain/orders";
 import * as records from "../src/lib/domain/records";
+import * as loss from "../src/lib/domain/loss";
 import * as reviews from "../src/lib/domain/reviews";
 import { searchListings } from "../src/lib/domain/search";
 import { getFarmerTodo, getShopTodo } from "../src/lib/domain/todo";
@@ -492,6 +493,106 @@ try {
     await prisma.restaurantProfile.update({ where: { userId: R2 }, data: { addressLine: "引っ越し先9-9" } });
     const again = await prisma.order.findUniqueOrThrow({ where: { id: o } });
     assert.equal(again.snapRestaurantAddress, snap.snapRestaurantAddress, "注文の届け先はそのまま");
+  });
+
+  await check("16. ロス記録：本人だけ・受取後だけ・1注文1件（訂正・同時でも二重にならない）・使用中はロス0にしない", async () => {
+    const L = await newListing(F, { totalKg: 10000, minKg: 1000, stepKg: 1000, price: 600 });
+    const o = okId(await order(R1, L, 2));
+    const notYet = await loss.saveLossRecord(prisma, { orderId: o, userId: R1, choice: { kind: "RATIO", quarters: 2 } });
+    assert.ok(!notYet.ok, "確定・受取前は記録できない");
+    assert.ok((await orders.approveOrder(prisma, { orderId: o, farmerUserId: F })).ok);
+    assert.ok((await records.markReceived(prisma, { orderId: o, userId: R1 })).ok);
+    assert.ok(!(await loss.saveLossRecord(prisma, { orderId: o, userId: R2, choice: { kind: "RATIO", quarters: 0 } })).ok, "他店は記録できない");
+    assert.ok(!(await loss.saveLossRecord(prisma, { orderId: o, userId: F, choice: { kind: "RATIO", quarters: 0 } })).ok, "農家は記録できない");
+    const half = await loss.saveLossRecord(prisma, { orderId: o, userId: R1, choice: { kind: "RATIO", quarters: 2 } });
+    assert.ok(half.ok && half.wasteGrams === 1000, "受取量2kgの約半分＝1kg");
+    const rec = await prisma.lossRecord.findUniqueOrThrow({ where: { orderId: o } });
+    assert.equal(rec.approximate, true, "割合ボタンは概算");
+    const over = await loss.saveLossRecord(prisma, { orderId: o, userId: R1, choice: { kind: "DIRECT", wasteKg: "2.5" } });
+    assert.ok(!over.ok && /超えて/.test(over.error), "受取量を超える廃棄量は不可");
+    await Promise.all([
+      loss.saveLossRecord(prisma, { orderId: o, userId: R1, choice: { kind: "DIRECT", wasteKg: "0.3" } }),
+      loss.saveLossRecord(prisma, { orderId: o, userId: R1, choice: { kind: "DIRECT", wasteKg: "0.3" } }),
+    ]);
+    assert.equal(await prisma.lossRecord.count({ where: { orderId: o } }), 1, "連打・訂正でも1注文1件");
+    const fixed = await prisma.lossRecord.findUniqueOrThrow({ where: { orderId: o } });
+    assert.equal(fixed.wasteGrams, 300);
+    assert.equal(fixed.approximate, false, "直接入力は概算ではない");
+    const ord = await prisma.order.findUniqueOrThrow({ where: { id: o } });
+    assert.equal(ord.quantityGrams, 2000, "元の注文は書き換えない");
+    // 実際の受取量の訂正（注文はそのまま）
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: o, userId: R1, choice: { kind: "IN_USE" }, receivedKg: "1.8" })).ok);
+    const inUse = await prisma.lossRecord.findUniqueOrThrow({ where: { orderId: o } });
+    assert.equal(inUse.status, "IN_USE");
+    assert.equal(inUse.wasteGrams, null, "使用中は廃棄量なし（ロス0ではない）");
+    assert.equal(inUse.receivedGrams, 1800);
+    assert.equal((await prisma.order.findUniqueOrThrow({ where: { id: o } })).quantityGrams, 2000);
+  });
+
+  await check("17. ロス集計：ロス率は合計÷合計、ロス額は商品代×割合（送料除く）、振り返りなしは「記録なし」、受取日が基準", async () => {
+    const L = await newListing(F2, { totalKg: 20000, minKg: 1000, stepKg: 1000, price: 1000 });
+    const rp = await prisma.restaurantProfile.findUniqueOrThrow({ where: { userId: R3 } });
+    const mk = async (kg: number, receivedDaysAgo: number) => {
+      const o = okId(await order(R3, L, kg));
+      assert.ok((await orders.approveOrder(prisma, { orderId: o, farmerUserId: F2 })).ok);
+      assert.ok((await records.markReceived(prisma, { orderId: o, userId: R3 })).ok);
+      await prisma.fulfillmentRecord.update({ where: { orderId: o }, data: { buyerReceivedAt: new Date(Date.now() - receivedDaysAgo * 86_400_000) } });
+      return o;
+    };
+    const from = new Date(Date.now() - 10 * 86_400_000);
+    const to = new Date(Date.now() + 86_400_000);
+    const empty = await loss.getLossSummary(prisma, rp.id, from, to);
+    assert.equal(empty.totals.lossRate, null, "振り返り済みがなければ0%ではなく記録なし");
+    const a = await mk(1, 3); // 1kg中 1kg廃棄（100%）
+    const b = await mk(4, 2); // 4kg中 1kg廃棄（25%）
+    const c = await mk(2, 1); // 使用中
+    await mk(1, 40); // 期間外
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: a, userId: R3, choice: { kind: "RATIO", quarters: 4 } })).ok);
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: b, userId: R3, choice: { kind: "RATIO", quarters: 1 } })).ok);
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: c, userId: R3, choice: { kind: "IN_USE" } })).ok);
+    const sum = await loss.getLossSummary(prisma, rp.id, from, to);
+    assert.equal(sum.totals.purchaseCount, 3, "期間内に受け取った3件（40日前は除外）");
+    assert.equal(sum.totals.purchaseGrams, 7000);
+    assert.equal(sum.totals.doneCount, 2);
+    assert.equal(sum.totals.pendingCount, 1, "使用中は未完了");
+    assert.equal(sum.totals.wasteGrams, 2000);
+    assert.equal(sum.totals.lossRate, 2000 / 5000, "合計÷合計＝40%（単純平均なら62.5%）");
+    // 商品代：1kg×1000円=1000円（送料別）→ 1000×100% + 4000×25% = 2000円
+    assert.equal(sum.totals.lossYen, 2000, "送料はロス額に含めない");
+    assert.equal(sum.totals.approximate, true);
+  });
+
+  await check("18. 注文前の案内：同じ食材の直近（受取日順）の振り返り済み注文で50%以上なら表示、50%ちょうどを含む", async () => {
+    const L = await newListing(F, { totalKg: 20000, minKg: 1000, stepKg: 1000, price: 500 });
+    const rp = await prisma.restaurantProfile.findUniqueOrThrow({ where: { userId: R2 } });
+    const mk = async (kg: number, receivedDaysAgo: number) => {
+      const o = okId(await order(R2, L, kg));
+      assert.ok((await orders.approveOrder(prisma, { orderId: o, farmerUserId: F })).ok);
+      assert.ok((await records.markReceived(prisma, { orderId: o, userId: R2 })).ok);
+      await prisma.fulfillmentRecord.update({ where: { orderId: o }, data: { buyerReceivedAt: new Date(Date.now() - receivedDaysAgo * 86_400_000) } });
+      return o;
+    };
+    assert.equal(await loss.getLossWarning(prisma, rp.id, "テスト茄子"), null, "記録がなければ出さない");
+    const older = await mk(2, 5);
+    const newer = await mk(2, 2);
+    // 新しい受取の注文を先に記録し、古い受取の注文を後から記録（編集順ではなく受取日順で判定する）
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: newer, userId: R2, choice: { kind: "DIRECT", wasteKg: "1" } })).ok); // 50%ちょうど
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: older, userId: R2, choice: { kind: "RATIO", quarters: 0 } })).ok);
+    const w = await loss.getLossWarning(prisma, rp.id, "テスト茄子");
+    assert.ok(w && w.wasteGrams === 1000 && w.receivedGrams === 2000, "直近（受取日が新しい方）の50%ちょうどで表示");
+    assert.equal(await loss.getLossWarning(prisma, rp.id, "テスト茄子（別品種）"), null, "名前が違う食材には出さない");
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: newer, userId: R2, choice: { kind: "DIRECT", wasteKg: "0.999" } })).ok);
+    assert.equal(await loss.getLossWarning(prisma, rp.id, "テスト茄子"), null, "50%未満なら出さない");
+    // 直近が使用中なら、振り返り済みの中で直近のもの（古い方：ロスなし）で判定
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: newer, userId: R2, choice: { kind: "IN_USE" } })).ok);
+    assert.equal(await loss.getLossWarning(prisma, rp.id, "テスト茄子"), null);
+    // 案内があっても申込は通常どおり（サーバーの検証を通る）
+    assert.ok((await loss.saveLossRecord(prisma, { orderId: newer, userId: R2, choice: { kind: "RATIO", quarters: 4 } })).ok);
+    assert.ok(await loss.getLossWarning(prisma, rp.id, "テスト茄子"));
+    const again = await order(R2, L, 1);
+    assert.ok(again.ok, "案内は注文を禁止しない");
+    const st = await stock(L);
+    assert.ok(st.sold + st.held <= st.total);
   });
 } finally {
   // このテストで作ったデータだけを削除する
