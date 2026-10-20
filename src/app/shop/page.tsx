@@ -9,6 +9,7 @@ import { pickEarlySale, searchListings } from "@/lib/domain/search";
 import { getShopTodo, jstDayRange, type ShopTodo } from "@/lib/domain/todo";
 import { dateToJstDateText, formatDateOnly, formatJst, formatKg } from "@/lib/domain/units";
 import { requireRestaurant } from "@/lib/guard";
+import { isServicePrefecture } from "@/lib/validation/listing";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "ホーム | LocAI" };
@@ -39,6 +40,11 @@ async function Content() {
         </Notice>
       ) : (
         <>
+          {!isServicePrefecture(profile.prefecture) && (
+        <Notice tone="warn">
+          登録済みの届け先（{profile.prefecture}）は対象地域外です。対象は関西2府4県です。<Link href="/shop/profile" className="link">マイページ</Link>で設定し直してください（これまでの注文の情報はそのまま残ります）。
+        </Notice>
+      )}
           <Link href="/shop/search" className="btn-primary py-4 text-xl">
             🔍 野菜をさがす
           </Link>

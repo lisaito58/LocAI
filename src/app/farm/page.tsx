@@ -7,6 +7,7 @@ import { Loading, Notice, Page } from "@/components/ui";
 import { expireDueOrders } from "@/lib/domain/orders";
 import { getFarmerTodo, SOON_HOURS, type FarmerTodo } from "@/lib/domain/todo";
 import { requireFarmer } from "@/lib/guard";
+import { isServicePrefecture } from "@/lib/validation/listing";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "ホーム | LocAI" };
@@ -38,6 +39,11 @@ async function Content() {
         </Notice>
       ) : (
         <>
+          {!isServicePrefecture(profile.prefecture) && (
+            <Notice tone="warn">
+              登録済みの所在地（{profile.prefecture}）は対象地域外です。対象は関西2府4県です。<Link href="/farm/profile" className="link">農園情報</Link>で設定し直すと出品できます（これまでの注文の情報はそのまま残ります）。
+            </Notice>
+          )}
           <Link href="/farm/listings/new" className="btn-primary py-4 text-xl">
             ＋ 野菜を出品する
           </Link>

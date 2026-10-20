@@ -3,6 +3,7 @@
 // 条件は任意。指定された条件だけを適用し、未指定の条件を「確認済み」として扱わない。
 // 申込前の確認（数量・在庫・送料込み総額・地域・日程・回答期限）は orders.ts の quoteInTx で必ず行う。
 import type { DeliveryMethod, PaymentMethod, PaymentTiming } from "@/generated/prisma/enums";
+import { SERVICE_PREFECTURES } from "@/lib/validation/listing";
 import { fairOrder } from "./ordering";
 import { expireDueOrders } from "./orders";
 import { findShippingFee } from "./shipping";
@@ -110,7 +111,13 @@ export async function searchListings(db: Db, restaurantUserId: string, p: Search
   await expireDueOrders(db, { listingIds: listings.map((l) => l.id) });
 
   const rows = await db.listing.findMany({
-    where: { id: { in: listings.map((l) => l.id) }, status: "PUBLISHED", acceptDeadlineAt: { gt: now } },
+    // 産地（農園の所在地）が対象地域の出品だけ
+    where: {
+      id: { in: listings.map((l) => l.id) },
+      status: "PUBLISHED",
+      acceptDeadlineAt: { gt: now },
+      farmer: { prefecture: { in: [...SERVICE_PREFECTURES] } },
+    },
     include: {
       farmer: {
         select: { id: true, farmName: true, city: true, prefecture: true, mapVisible: true, responseGuide: true, user: { select: { createdAt: true } } },

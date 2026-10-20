@@ -32,6 +32,8 @@ async function Content() {
               prefecture: profile.prefecture,
               city: profile.city,
               addressLine: profile.addressLine,
+              town: profile.town ?? "",
+              building: profile.building ?? "",
               contactPhone: profile.contactPhone,
               postalCode: profile.postalCode ?? "",
             }

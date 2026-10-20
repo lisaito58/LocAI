@@ -34,10 +34,10 @@ export default function Home() {
               <span aria-hidden className="absolute -bottom-1 left-0 h-3 w-full -rotate-1 rounded-full bg-sprout/40" />
             </span>
           </h1>
-          <p className="mt-5 text-lg font-bold text-gray-700">農家と店をつなぐ 🚜 🤝 🏮</p>
+          <p className="mt-5 text-lg font-bold text-gray-700">関西の農家と飲食店をつなぐ 🚜 🤝 🏮</p>
           <p className="mt-4 max-w-xl rounded-3xl bg-white/85 p-4 text-sm leading-relaxed text-gray-700 shadow-sm">
             農家さんはまとまった在庫を一度出品するだけ。飲食店は販売単位の範囲で
-            <strong>必要な量だけ</strong>購入希望を送れます。農家さんは複数のお店の希望をまとめて見て、注文ごとに販売を決められます。
+            <strong>必要な量だけ</strong>購入希望を送れます。対象地域は関西2府4県（大阪府・京都府・兵庫県・滋賀県・奈良県・和歌山県）です。農家さんは複数のお店の希望をまとめて見て、注文ごとに販売を決められます。
           </p>
           <Suspense fallback={<RoleButtons />}>
             <HeroActions />

@@ -315,6 +315,11 @@ function currentStateError(status: OrderStatus): string {
   return `この注文は現在「${ORDER_STATUS_LABELS[status]}」です。画面を更新して確認してください`;
 }
 
+// 住所を1行にする（都道府県＋市区町村＋町域＋番地など＋建物名）
+export function fullAddress(a: { prefecture: string; city: string; town?: string | null; addressLine: string; building?: string | null }) {
+  return `${a.prefecture}${a.city}${a.town ?? ""}${a.addressLine}${a.building ? ` ${a.building}` : ""}`;
+}
+
 async function confirmSale(tx: Tx, orderId: string, listingId: string, heldGrams: number) {
   await tx.listing.update({
     where: { id: listingId },
@@ -326,16 +331,16 @@ async function confirmSale(tx: Tx, orderId: string, listingId: string, heldGrams
   const o = await tx.order.findUniqueOrThrow({
     where: { id: orderId },
     select: {
-      restaurant: { select: { prefecture: true, city: true, addressLine: true, contactPhone: true } },
-      farmer: { select: { prefecture: true, city: true, addressLine: true, contactPhone: true } },
+      restaurant: { select: { prefecture: true, city: true, town: true, addressLine: true, building: true, contactPhone: true } },
+      farmer: { select: { prefecture: true, city: true, town: true, addressLine: true, building: true, contactPhone: true } },
     },
   });
   await tx.order.update({
     where: { id: orderId },
     data: {
-      snapRestaurantAddress: `${o.restaurant.prefecture}${o.restaurant.city}${o.restaurant.addressLine}`,
+      snapRestaurantAddress: fullAddress(o.restaurant),
       snapRestaurantPhone: o.restaurant.contactPhone,
-      snapFarmerAddress: `${o.farmer.prefecture}${o.farmer.city}${o.farmer.addressLine}`,
+      snapFarmerAddress: fullAddress(o.farmer),
       snapFarmerPhone: o.farmer.contactPhone,
     },
   });

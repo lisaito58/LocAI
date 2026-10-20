@@ -30,6 +30,13 @@ export const PREFECTURES = [
   "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
 ] as const;
 
+// サービスの対象地域：関西2府4県。登録・編集・送料・検索・地図はこの範囲に統一する
+export const SERVICE_PREFECTURES = ["大阪府", "京都府", "兵庫県", "滋賀県", "奈良県", "和歌山県"] as const;
+export const SERVICE_AREA_LABEL = "関西2府4県（大阪府・京都府・兵庫県・滋賀県・奈良県・和歌山県）";
+export function isServicePrefecture(p: string | null | undefined): boolean {
+  return (SERVICE_PREFECTURES as readonly string[]).includes(p ?? "");
+}
+
 export const kgText = (label: string) =>
   z
     .string()
@@ -78,7 +85,7 @@ export const deliveryOptionSchema = z
     rates: z
       .array(
         z.object({
-          prefecture: z.enum(PREFECTURES, "送料の地域を選んでください"),
+          prefecture: z.enum(SERVICE_PREFECTURES, `送料の地域は${SERVICE_AREA_LABEL}から選んでください`),
           minKg: kgText("送料帯の下限"),
           maxKg: kgText("送料帯の上限"),
           feeYen: yen("送料"),

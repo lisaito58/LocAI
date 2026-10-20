@@ -21,7 +21,7 @@ import { ReviewForm } from "@/components/reviews";
 import { itemEmoji, Loading, Notice, Page, StatusBadge } from "@/components/ui";
 import { estimateReceipt } from "@/lib/domain/estimate";
 import { PAYMENT_STATUS_LABELS } from "@/lib/domain/order-labels";
-import { expireDueOrders } from "@/lib/domain/orders";
+import { expireDueOrders, fullAddress } from "@/lib/domain/orders";
 import { dbNow } from "@/lib/domain/tx";
 import { formatDateOnly, formatJst, formatKg, formatYen, gramsToKgText } from "@/lib/domain/units";
 import { requireUser } from "@/lib/guard";
@@ -58,8 +58,8 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
   const order = await prisma.order.findUniqueOrThrow({
     where: { id },
     include: {
-      farmer: { select: { userId: true, farmName: true, prefecture: true, city: true, addressLine: true, contactPhone: true } },
-      restaurant: { select: { userId: true, shopName: true, prefecture: true, city: true, addressLine: true, contactPhone: true } },
+      farmer: { select: { userId: true, farmName: true, prefecture: true, city: true, town: true, addressLine: true, building: true, contactPhone: true } },
+      restaurant: { select: { userId: true, shopName: true, prefecture: true, city: true, town: true, addressLine: true, building: true, contactPhone: true } },
       changeProposal: true,
       payment: true,
       fulfillment: true,
@@ -82,14 +82,14 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
         label: "お店",
         name: order.restaurant.shopName,
         area: `${order.restaurant.prefecture}${order.restaurant.city}`,
-        address: order.snapRestaurantAddress ?? `${order.restaurant.prefecture}${order.restaurant.city}${order.restaurant.addressLine}`,
+        address: order.snapRestaurantAddress ?? fullAddress(order.restaurant),
         phone: order.snapRestaurantPhone ?? order.restaurant.contactPhone,
       }
     : {
         label: "農家さん",
         name: order.farmer.farmName,
         area: `${order.farmer.prefecture}${order.farmer.city}`,
-        address: order.snapFarmerAddress ?? `${order.farmer.prefecture}${order.farmer.city}${order.farmer.addressLine}`,
+        address: order.snapFarmerAddress ?? fullAddress(order.farmer),
         phone: order.snapFarmerPhone ?? order.farmer.contactPhone,
       };
   const contactFromSnapshot = Boolean(isFarmer ? order.snapRestaurantAddress : order.snapFarmerAddress);

@@ -1,6 +1,6 @@
 // 出品の作成・公開・編集・受付終了・再公開
 // 再公開は同じ出品IDで行い、総量を最初の値に戻さない。既存注文は申込時のスナップショットを使う。
-import { checkSaleTarget, PREFECTURES, type ListingInput } from "@/lib/validation/listing";
+import { checkSaleTarget, isServicePrefecture, SERVICE_AREA_LABEL, SERVICE_PREFECTURES, type ListingInput } from "@/lib/validation/listing";
 import { validateShippingBands } from "./shipping";
 import { expireDueOrdersInListing } from "./orders";
 import { dbNow, fail, lockListing, runTx, type Db, type Result, type Tx } from "./tx";
@@ -66,7 +66,7 @@ export function checkListingInput(input: ListingInput, now: Date) {
     // 引き取りは送料0円。どの地域のお店も申し込めるよう、全都道府県を0円で登録する（入力は求めない）
     const rates =
       o.method === "PICKUP"
-        ? PREFECTURES.map((prefecture) => ({ prefecture, minGramsExclusive: 0, maxGramsInclusive: LIMITS.maxQuantityGrams, feeYen: 0 }))
+        ? SERVICE_PREFECTURES.map((prefecture) => ({ prefecture, minGramsExclusive: 0, maxGramsInclusive: LIMITS.maxQuantityGrams, feeYen: 0 }))
         : o.rates.map((r) => ({
             prefecture: r.prefecture,
             minGramsExclusive: r.minKg,
@@ -139,6 +139,8 @@ export async function createListing(
   return runTx(db, async (tx) => {
     const farmer = await tx.farmerProfile.findUnique({ where: { userId: input.farmerUserId } });
     if (!farmer) fail("先に農園プロフィールを登録してください");
+    // 産地も対象地域（関西2府4県）に限る
+    if (!isServicePrefecture(farmer.prefecture)) fail(`農園の所在地を${SERVICE_AREA_LABEL}に設定してから出品してください`);
     const now = await dbNow(tx);
     const { errors, options, accept, response, saleTargetAt } = checkListingInput(input.data, now);
     if (errors.length) fail(errors.join("\n"));

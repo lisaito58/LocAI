@@ -15,7 +15,7 @@ import {
   DELIVERY_METHOD_LABELS,
   PAYMENT_METHOD_LABELS,
   PAYMENT_TIMING_LABELS,
-  PREFECTURES,
+  SERVICE_PREFECTURES,
   SIZE_LABELS,
 } from "@/lib/validation/listing";
 import type { ListingDraft, ListingFormProps, Method, Option } from "./listing-defaults";
@@ -449,7 +449,7 @@ export function ListingForm({ mode, sourceId, initial, farmPrefecture, currentAv
                         <fieldset key={j} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-2 text-sm">
                           <legend className="sr-only">送料 {j + 1}行目</legend>
                           <select aria-label="地域" className="input w-auto" value={r.prefecture} onChange={(e) => upd({ prefecture: e.target.value })}>
-                            {PREFECTURES.map((p) => (
+                            {SERVICE_PREFECTURES.map((p) => (
                               <option key={p}>{p}</option>
                             ))}
                           </select>
