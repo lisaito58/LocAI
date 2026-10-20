@@ -4,7 +4,7 @@ import { useState } from "react";
 import { saveLossAction } from "@/app/actions/loss";
 import { ActionButton } from "@/components/action-button";
 import { ReqMark } from "@/components/fields";
-import { RATIO_CHOICES, wasteFromRatio } from "@/lib/domain/loss";
+import { RATIO_CHOICES, wasteFromRatio } from "@/lib/domain/loss-rules";
 import { formatKg, kgTextToGrams } from "@/lib/domain/units";
 
 export function LossForm({ orderId, receivedGrams, initialChoice }: { orderId: string; receivedGrams: number; initialChoice: string }) {

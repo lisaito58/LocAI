@@ -4,26 +4,10 @@
 // - 「まだ使用中」と未入力は振り返り未完了。ロス0として数えない
 // - 注文・在庫・支払い・レビュー・農家の評価には影響させない
 import { DomainError, fail, isUniqueViolation, type Db, type Result } from "./tx";
+import { itemKey, wasteFromRatio } from "./loss-rules";
 import { kgTextToGrams } from "./units";
 
-export const RATIO_CHOICES = [
-  { q: 0, label: "ロスなし・使い切った" },
-  { q: 1, label: "約4分の1を廃棄" },
-  { q: 2, label: "約半分を廃棄" },
-  { q: 3, label: "約4分の3を廃棄" },
-  { q: 4, label: "全部廃棄" },
-] as const;
-
-// 同じ食材かどうか：表記の揺れ（全角半角・空白）だけをそろえ、完全に一致するものを同じとみなす
-// （食材の分類・識別のデータがないため、「賀茂茄子」と「賀茂なす」は別の食材として扱う）
-export function itemKey(name: string): string {
-  return name.normalize("NFKC").replace(/\s/g, "");
-}
-
-// 割合ボタンからの廃棄量（g整数）。受取量の割合をアプリが計算する
-export function wasteFromRatio(receivedGrams: number, quarters: number): number {
-  return Math.round((receivedGrams * quarters) / 4);
-}
+export { itemKey, RATIO_CHOICES, wasteFromRatio } from "./loss-rules";
 
 export type LossChoice = { kind: "IN_USE" } | { kind: "RATIO"; quarters: number } | { kind: "DIRECT"; wasteKg: string };
 
