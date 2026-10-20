@@ -33,6 +33,7 @@ export type Candidate = {
   farmName: string;
   farmCity: string;
   farmPrefecture: string;
+  farmMapVisible: boolean; // 地図に「市区町村のおおよその位置」で表示してよいか（農家の設定）
   responseGuide: string | null;
   itemName: string;
   description: string | null;
@@ -111,7 +112,9 @@ export async function searchListings(db: Db, restaurantUserId: string, p: Search
   const rows = await db.listing.findMany({
     where: { id: { in: listings.map((l) => l.id) }, status: "PUBLISHED", acceptDeadlineAt: { gt: now } },
     include: {
-      farmer: { select: { id: true, farmName: true, city: true, prefecture: true, responseGuide: true, user: { select: { createdAt: true } } } },
+      farmer: {
+        select: { id: true, farmName: true, city: true, prefecture: true, mapVisible: true, responseGuide: true, user: { select: { createdAt: true } } },
+      },
       photos: { orderBy: [{ publishRound: "desc" }, { createdAt: "asc" }], take: 1, select: { url: true } },
       deliveryOptions: {
         where: { active: true, ...(p.deliveryMethod !== "ANY" && { method: p.deliveryMethod }) },
@@ -192,6 +195,7 @@ export async function searchListings(db: Db, restaurantUserId: string, p: Search
       farmName: l.farmer.farmName,
       farmCity: l.farmer.city,
       farmPrefecture: l.farmer.prefecture,
+      farmMapVisible: l.farmer.mapVisible,
       responseGuide: l.farmer.responseGuide,
       itemName: l.itemName,
       description: l.description,

@@ -11,3 +11,12 @@ export function cityPoint(prefecture: string, city: string): [number, number] | 
   const p = POINTS[prefecture]?.[city];
   return p && p.length === 2 ? [p[0], p[1]] : null;
 }
+
+// 都道府県の中心の目安（市区町村の代表点の平均）。地図の初期表示・地域の移動に使う
+export function prefecturePoint(prefecture: string): [number, number] | null {
+  const list = Object.values(POINTS[prefecture] ?? {}).filter((p) => p.length === 2);
+  if (list.length === 0) return null;
+  const lat = list.reduce((s, p) => s + p[0], 0) / list.length;
+  const lng = list.reduce((s, p) => s + p[1], 0) / list.length;
+  return [Math.round(lat * 1000) / 1000, Math.round(lng * 1000) / 1000];
+}

@@ -13,10 +13,12 @@ import { pickEarlySale, searchListings, type Candidate, type SearchResult } from
 import { formatJst, gramsToKgText } from "@/lib/domain/units";
 import { requireRestaurant } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
-import { DELIVERY_METHOD_LABELS } from "@/lib/validation/listing";
+import { cityPoint, prefecturePoint } from "@/lib/data/municipality-points";
+import { DELIVERY_METHOD_LABELS, PREFECTURES } from "@/lib/validation/listing";
 import { ITEM_MODE_LABELS, newSeed, parseSearchQuery, searchHref, SORT_LABELS, type ParsedSearch } from "@/lib/validation/search";
 import { CandidateCard } from "./candidate-card";
 import { EditSearchButton } from "./edit-search-button";
+import { FarmMap, type MapArea } from "./farm-map";
 import { SearchForm, type SearchValues } from "./search-form";
 
 export const metadata: Metadata = { title: "野菜をさがす | LocAI" };
@@ -69,7 +71,7 @@ async function Content({ searchParams }: Pick<PageProps<"/shop/search">, "search
 
   return (
     <div className="flex flex-col gap-6">
-      <SearchForm key={raw.seed} initial={initial} prefecture={profile.prefecture} sort={raw.sort ?? "fair"} />
+      <SearchForm key={raw.seed} initial={initial} prefecture={profile.prefecture} sort={raw.sort ?? "fair"} view={raw.view === "map" ? "map" : "list"} />
       {"errors" in parsed ? (
         <Notice tone="error">
           <p className="font-bold">入力を確認してください</p>
@@ -138,6 +140,32 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
   ].filter(Boolean) as string[];
   const early = pickEarlySale(result.normal, p.seed);
 
+  // 地図：農家が表示を許可した出品だけを、市区町村の「おおよその位置」ごとにまとめる
+  const view = raw.view === "map" ? "map" : "list";
+  const areaMap = new Map<string, MapArea>();
+  let hiddenOnMap = 0;
+  for (const c of result.normal) {
+    const point = c.farmMapVisible ? cityPoint(c.farmPrefecture, c.farmCity) : null;
+    if (!point) {
+      hiddenOnMap++;
+      continue;
+    }
+    const key = `${c.farmPrefecture}${c.farmCity}`;
+    const area = areaMap.get(key) ?? { key, prefecture: c.farmPrefecture, city: c.farmCity, point, farms: [] };
+    let farm = area.farms.find((f) => f.farmName === c.farmName);
+    if (!farm) {
+      farm = { farmName: c.farmName, listings: [] };
+      area.farms.push(farm);
+    }
+    farm.listings.push({ id: c.listingId, itemName: c.itemName, href: detailHref(c) });
+    areaMap.set(key, area);
+  }
+  const areas = [...areaMap.values()];
+  const mapCenter = prefecturePoint(result.prefecture) ?? areas[0]?.point ?? [34.99, 135.76];
+  const prefecturePoints = PREFECTURES.map((name) => ({ name, point: prefecturePoint(name) })).filter(
+    (x): x is { name: (typeof PREFECTURES)[number]; point: [number, number] } => x.point !== null,
+  );
+
   return (
     <div className="flex flex-col gap-6">
       {notices.map((n) => (
@@ -179,6 +207,28 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
           </h2>
           <span className="text-sm text-gray-700">📍{result.prefecture}への受け渡しで計算</span>
         </div>
+        {/* 一覧と地図は同じ検索条件で切り替える */}
+        <nav aria-label="表示の切り替え" className="grid grid-cols-2 gap-2">
+          {(
+            [
+              ["list", "📋 一覧で見る"],
+              ["map", "🗺 地図で見る"],
+            ] as const
+          ).map(([key, label]) => {
+            const active = (view === "map") === (key === "map");
+            return (
+              <Link
+                key={key}
+                href={searchHref(raw, { view: key === "map" ? "map" : null, page: null })}
+                aria-current={active ? "true" : undefined}
+                className={`btn ${active ? "bg-leaf text-white" : "border-2 border-green-200 bg-white text-leaf-dark"}`}
+              >
+                {active && "✓ "}
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
         {unchecked.length > 0 && result.normal.length > 0 && (
           <p className="rounded-2xl bg-white px-3 py-2 text-sm text-gray-800 ring-1 ring-green-200">
             ℹ️ 未指定のため確認していない条件：{unchecked.join("・")}。申し込む前に、出品の詳しい画面で確認します。
@@ -204,6 +254,13 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
               </div>
             </CalmNotice>
           )
+        ) : view === "map" ? (
+          <>
+            {hiddenOnMap > 0 && (
+              <p className="text-sm text-gray-700">地図に位置を表示していない出品が {hiddenOnMap}件あります（「📋 一覧で見る」で表示されます）。</p>
+            )}
+            <FarmMap areas={areas} center={mapCenter} prefectures={prefecturePoints} />
+          </>
         ) : (
           <>
             <nav aria-label="並べ替え" className="flex flex-wrap gap-2 text-sm">
@@ -231,12 +288,16 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
                 );
               })}
             </nav>
-            <p className="hint">
-              {p.sort === "fair" && "人気順ではなく、検索ごとに順番を入れ替え、同じ農家さんが続かないように並べています。AIは並び順を決めません。"}
-              {p.sort === "deadline" && "新しい申込を受け付ける期限（受付期限）が近い順です。"}
-              {p.sort === "saleTarget" && "農家さんの「この日時までに販売を決めたい」期限（販売希望期限）が近い出品を先に、その後ろはおすすめ順です。"}
-              {p.sort === "total" && "同じ希望数量で計算した送料込み合計が安い順です。"}
-            </p>
+            <details className="text-sm">
+              <summary className="cursor-pointer font-bold text-leaf-dark">並び順のしくみ</summary>
+              <ul className="mt-1 ml-5 list-disc text-gray-800">
+                <li>おすすめ順：人気順ではなく、検索ごとに順番を入れ替え、同じ農家さんが続かないように並べます。AIは並び順を決めません。</li>
+                <li>並び順は「この条件で探す」を押したときに入れ替わります。ページの移動や詳細から戻ったときは同じ順番のままです。</li>
+                <li>送料込み総額順：同じ希望数量で計算した合計が安い順です（数量の入力が必要）。</li>
+                <li>受付期限が近い順：新しい申込を受け付ける期限が近い順です。</li>
+                <li>販売希望期限が近い順：農家さんの「この日時までに販売を決めたい」期限が近い出品が先、その後ろはおすすめ順です。</li>
+              </ul>
+            </details>
             <div className="flex flex-col gap-3">
               {pageItems.map((c) => (
                 <CandidateCard key={c.listingId} c={c} href={detailHref(c)} wantedGrams={p.quantityGrams} ai={<AiReason promise={reasons} id={c.listingId} />} />

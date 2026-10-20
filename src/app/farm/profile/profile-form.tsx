@@ -76,6 +76,12 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
           <p className="hint mt-1">
             地図には、上で選んだ市区町村の「おおよその位置」（代表点）だけを表示します。番地・建物名・引き取り場所は表示しません。表示しない場合も、一覧からは探せます。
           </p>
+          {initial?.prefecture && initial.city && (
+            <p className="mt-1 text-sm font-bold">
+              いま保存されている表示位置：{initial.prefecture}
+              {initial.city} のおおよその位置{initial.mapVisible ? "（表示中）" : "（表示していません）"}
+            </p>
+          )}
         </div>
         <Field
           label="主な品目"
