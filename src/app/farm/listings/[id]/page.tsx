@@ -12,7 +12,6 @@ import { formatJst, formatKg, formatYen, gramsToKgText } from "@/lib/domain/unit
 import { requireFarmer } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { DELIVERY_METHOD_LABELS, PAYMENT_METHOD_LABELS, PAYMENT_TIMING_LABELS } from "@/lib/validation/listing";
-import { ListingEditForm } from "./edit-form";
 
 export const metadata: Metadata = { title: "出品の管理 | LocAI" };
 
@@ -52,6 +51,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
   });
   if (!listing) notFound();
   const now = await dbNow(prisma);
+  const trialUsed = listing.orders.filter((o) => o.isTrial && ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT", "CONFIRMED"].includes(o.status)).length;
   const accepting = listing.status === "PUBLISHED" && listing.acceptDeadlineAt > now;
   const canRepublish = !accepting;
   const available = listing.totalGrams - listing.soldGrams - listing.heldGrams;
@@ -113,6 +113,11 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
             ⏰ 受付期限 <strong>{formatJst(listing.acceptDeadlineAt)}</strong> ／ 回答の最終期限 <strong>{formatJst(listing.responseDeadlineAt)}</strong>
           </p>
           <StockBar total={listing.totalGrams} sold={listing.soldGrams} held={listing.heldGrams} />
+          {listing.trialEnabled && listing.trialSetGrams && (
+            <p className="text-sm font-bold text-leaf-dark">
+              🧺 お試しセット：1セット{formatKg(listing.trialSetGrams)}・{formatYen(listing.trialSetPriceYen ?? 0)}（用意 {listing.trialSetCount}セット、申込中・確定 {trialUsed}セット）
+            </p>
+          )}
           {listing.earlySale && listing.saleTargetAt && (
             <p className="text-sm font-bold text-orange-900">⏳ 早めに販売したい：販売希望期限 {formatJst(listing.saleTargetAt)}（受付・回答・受け渡しの期限は別です）</p>
           )}
@@ -127,6 +132,9 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
                 🔁 残りを再公開
               </Link>
             )}
+            <Link href={`/farm/listings/${listing.id}/edit`} className="btn-primary btn-sm">
+              ✏️ 出品を編集する
+            </Link>
             <Link href={`/farm/listings/${listing.id}/review`} className="btn-secondary btn-sm">
               🔎 販売条件を見直す（試算・早めに販売）
             </Link>
@@ -161,6 +169,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
                   <li key={o.id}>
                     <Link href={`/orders/${o.id}`} className="flex flex-wrap items-center gap-2 rounded-xl bg-leaf-light/50 px-3 py-2 text-sm hover:bg-leaf-light">
                       <StatusBadge status={o.status} />
+                      {o.isTrial && <span className="badge bg-orange-100 text-orange-900">🧺 お試し</span>}
                       <span className={`badge ${o.hasConsultation ? "bg-sky-100 text-sky-800" : "bg-white text-leaf-dark"}`}>
                         {o.hasConsultation ? "💬 相談あり" : "👌 条件どおり"}
                       </span>
@@ -261,22 +270,12 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
         ))}
       </section>
 
-      <section className="card">
-        <details>
-          <summary className="section-title cursor-pointer">✏️ 価格・総量・説明を編集する</summary>
-          <div className="mt-3">
-            <ListingEditForm
-              listingId={listing.id}
-              initial={{
-                unitPriceYenPerKg: listing.unitPriceYenPerKg,
-                totalKg: gramsToKgText(listing.totalGrams),
-                description: listing.description ?? "",
-                selfDeclaredFeatures: listing.selfDeclaredFeatures ?? "",
-                conditionNote: listing.conditionNote ?? "",
-              }}
-            />
-          </div>
-        </details>
+      <section className="card flex flex-col gap-2">
+        <h2 className="section-title">✏️ 出品の内容を変える</h2>
+        <p className="text-sm">基本情報（価格・総量・説明など）・送料表・お試し販売を変更できます。届いている購入希望や確定した注文の条件は変わりません。</p>
+        <Link href={`/farm/listings/${listing.id}/edit`} className="btn-primary self-start">
+          ✏️ 出品を編集する
+        </Link>
       </section>
     </div>
   );

@@ -1,7 +1,7 @@
 // プロフィールの入力ルール
 import { z } from "zod";
 import { isValidCity } from "@/lib/data/municipalities";
-import { blankToUndefined, PREFECTURES } from "./listing";
+import { blankToUndefined, SERVICE_AREA_LABEL, SERVICE_PREFECTURES } from "./listing";
 import { checkPhone } from "./phone";
 import { checkPostal } from "./postal";
 
@@ -29,9 +29,11 @@ const base = {
       }
       return r.display;
     }),
-  prefecture: z.enum(PREFECTURES, "都道府県を選んでください"),
+  prefecture: z.enum(SERVICE_PREFECTURES, `都道府県は${SERVICE_AREA_LABEL}から選んでください`),
   city: z.string().trim().min(1, "市区町村を選んでください"),
-  addressLine: required("番地・建物名", 100),
+  town: optional(50),
+  addressLine: required("番地など、住所の続き", 100),
+  building: optional(100),
   contactPhone: z.string().transform((v, ctx) => {
     const r = checkPhone(v);
     if (!r.ok) {
@@ -67,6 +69,10 @@ export const farmerProfileSchema = z.object({
   responseGuide: optional(50),
   availableWeekdays: z.array(z.enum(WEEKDAYS)).max(7),
   mapVisible: z.preprocess((v) => v === "on", z.boolean()),
+  trialDailyLimit: z.preprocess(
+    blankToUndefined,
+    z.coerce.number("お試しの件数は数字で入力してください").int("お試しの件数は整数で入力してください").min(0).max(100, "お試しの件数は100件以下にしてください").optional(),
+  ).transform((v) => v ?? null),
   paymentConfirmGuideHours: z.preprocess(
     blankToUndefined,
     z.coerce
@@ -80,7 +86,7 @@ export const farmerProfileSchema = z.object({
 // AI紹介文の下書きに使う、本人が入力した公開用テキストだけ
 export const introDraftSchema = z.object({
   farmName: required("農園名", 50),
-  prefecture: z.enum(PREFECTURES, "都道府県を選んでください"),
+  prefecture: z.enum(SERVICE_PREFECTURES, `都道府県は${SERVICE_AREA_LABEL}から選んでください`),
   city: required("市区町村", 30),
   mainItems: required("主な品目", 100),
   commitment: required("栽培のこだわり", 300),

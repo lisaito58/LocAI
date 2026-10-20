@@ -15,9 +15,12 @@ type Initial = {
   prefecture: string;
   city: string;
   addressLine: string;
+  town: string;
+  building: string;
   contactPhone: string;
   postalCode: string;
   mapVisible: boolean;
+  trialDailyLimit: number | null;
   mainItems: string;
   commitment: string;
   introduction: string;
@@ -60,11 +63,26 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
   return (
     <form ref={formRef} onSubmit={onSubmit} onChange={markDirty} data-dirty-label="農園情報" className="flex flex-col gap-5">
       <section className="card flex flex-col gap-4">
+        <h2 className="section-title">📍 農園の所在地</h2>
+        <AddressFields
+          initial={{
+            prefecture: initial?.prefecture ?? "京都府",
+            city: initial?.city,
+            town: initial?.town,
+            addressLine: initial?.addressLine,
+            building: initial?.building,
+            postalCode: initial?.postalCode,
+          }}
+          errors={e}
+          prefectureHint="都道府県・市区町村はお店に公開されます（関西2府4県）"
+          privateNote="町域・番地・建物名は、販売確定した取引の相手だけに表示されます"
+        />
+      </section>
+      <section className="card flex flex-col gap-4">
         <h2 className="section-title">🌾 公開する情報</h2>
         <Field label="農園名（デモでは架空の名前）" required errors={e?.farmName}>
           <TextInput name="farmName" defaultValue={initial?.farmName} required maxLength={50} />
         </Field>
-        <AddressFields initial={{ prefecture: initial?.prefecture ?? "京都府", city: initial?.city, postalCode: initial?.postalCode }} errors={e} showAddressLine={false} />
         <div className="rounded-2xl border-2 border-green-100 p-3">
           <label className="flex min-h-11 items-start gap-2 font-bold">
             <input type="checkbox" name="mapVisible" defaultChecked={initial?.mapVisible ?? true} className="mt-1 size-5 accent-green-700" />
@@ -158,10 +176,17 @@ export function FarmerProfileForm({ initial }: { initial: Initial }) {
 
       <section className="card flex flex-col gap-4">
         <h2 className="section-title">🔒 取引相手にだけ表示する情報</h2>
-        <Field label="番地・建物名" required hint="都道府県・市区町村は上で選んだものを使います" errors={e?.addressLine}>
-          <TextInput name="addressLine" defaultValue={initial?.addressLine} required maxLength={100} placeholder="例：園部町1-2-3" />
-        </Field>
         <PhoneField label="電話番号" defaultValue={initial?.contactPhone} serverErrors={e?.contactPhone} />
+        <div id="trial" className="scroll-mt-24">
+          <Field
+            label="お試し販売：1日に準備・発送・引き渡しできる件数"
+            optional
+            hint="受け渡し日ごとの上限です（申し込まれた日ではありません）。空欄なら上限なし、0なら受け付けません。お試し販売は出品ごとに設定します。"
+            errors={e?.trialDailyLimit}
+          >
+            <TextInput name="trialDailyLimit" type="number" min={0} max={100} defaultValue={initial?.trialDailyLimit ?? ""} />
+          </Field>
+        </div>
         <Field
           label="入金確認の目安（時間）"
           required

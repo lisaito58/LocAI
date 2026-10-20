@@ -15,7 +15,7 @@ import {
   DELIVERY_METHOD_LABELS,
   PAYMENT_METHOD_LABELS,
   PAYMENT_TIMING_LABELS,
-  PREFECTURES,
+  SERVICE_PREFECTURES,
   SIZE_LABELS,
 } from "@/lib/validation/listing";
 import type { ListingDraft, ListingFormProps, Method, Option } from "./listing-defaults";
@@ -449,7 +449,7 @@ export function ListingForm({ mode, sourceId, initial, farmPrefecture, currentAv
                         <fieldset key={j} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-2 text-sm">
                           <legend className="sr-only">送料 {j + 1}行目</legend>
                           <select aria-label="地域" className="input w-auto" value={r.prefecture} onChange={(e) => upd({ prefecture: e.target.value })}>
-                            {PREFECTURES.map((p) => (
+                            {SERVICE_PREFECTURES.map((p) => (
                               <option key={p}>{p}</option>
                             ))}
                           </select>
@@ -489,9 +489,10 @@ export function ListingForm({ mode, sourceId, initial, farmPrefecture, currentAv
 
               <div className="rounded-2xl bg-leaf-light/40 p-3">
                 <div className="label mb-1">
-                  📅 受け渡し日程
+                  📅 お店が受け取る予定の日時
                   <ReqMark required />
                 </div>
+                <p className="hint mb-2">宅配の場合も、発送日ではなく「お店に届く予定の日時」を入れてください。お店は使用日までに受け取れる日程から選びます。</p>
                 <div className="flex flex-col gap-2">
                   {o.slots.map((s, j) => {
                     const upd = (patch: Partial<typeof s>) => setOption(i, { slots: o.slots.map((x, k) => (k === j ? { ...x, ...patch } : x)) });
@@ -589,7 +590,7 @@ export function ListingForm({ mode, sourceId, initial, farmPrefecture, currentAv
       <FormMessage message={clientError ?? state?.error} />
 
       {/* 戻る／次へ／公開する */}
-      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-3xl bg-white/95 p-2 shadow-[0_-4px_16px_-8px_rgb(0_0_0/0.25)] md:bottom-2">
+      <div data-sticky-actions className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-3xl bg-white/95 p-2 shadow-[0_-4px_16px_-8px_rgb(0_0_0/0.25)] md:bottom-2">
         {step > 0 && (
           <button key="back" type="button" onClick={() => setStep(step - 1)} className="btn-secondary flex-1">
             ← 戻る

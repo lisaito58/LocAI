@@ -3,6 +3,8 @@
 // 条件は任意。指定された条件だけを適用し、未指定の条件を「確認済み」として扱わない。
 // 申込前の確認（数量・在庫・送料込み総額・地域・日程・回答期限）は orders.ts の quoteInTx で必ず行う。
 import type { DeliveryMethod, PaymentMethod, PaymentTiming } from "@/generated/prisma/enums";
+import { SERVICE_PREFECTURES } from "@/lib/validation/listing";
+import { itemMatches } from "./item-search";
 import { fairOrder } from "./ordering";
 import { expireDueOrders } from "./orders";
 import { findShippingFee } from "./shipping";
@@ -39,6 +41,7 @@ export type Candidate = {
   description: string | null;
   selfDeclaredFeatures: string | null;
   sizeLabel: string | null;
+  trialOffered: boolean; // お試しセットを設定している（残り・利用可否は詳細画面で確認）
   unitPriceYenPerKg: number;
   minOrderGrams: number;
   orderStepGrams: number;
@@ -74,19 +77,8 @@ export type SearchResult = {
 
 const NEW_FARMER_DAYS = 30;
 
-function normalize(s: string) {
-  // カタカナをひらがなにそろえ、空白を除く
-  return s
-    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
-    .replace(/\s/g, "")
-    .toLowerCase();
-}
-
-export function itemMatches(itemName: string, query: string) {
-  const a = normalize(itemName);
-  const b = normalize(query);
-  return b.length > 0 && (a.includes(b) || b.includes(a));
-}
+// 食材名の照合は表記ゆれ（ひらがな・カタカナ・よく使う漢字）をそろえて行う
+export { itemMatches };
 
 // 早めに販売したい野菜：いま申し込めば、回答猶予を含めて販売希望期限までに合意できる見込みがあるか
 export function isSaleTargetReachable(l: { earlySale: boolean; saleTargetAt: Date | null; responseGraceMinutes: number }, now: Date) {
@@ -110,7 +102,13 @@ export async function searchListings(db: Db, restaurantUserId: string, p: Search
   await expireDueOrders(db, { listingIds: listings.map((l) => l.id) });
 
   const rows = await db.listing.findMany({
-    where: { id: { in: listings.map((l) => l.id) }, status: "PUBLISHED", acceptDeadlineAt: { gt: now } },
+    // 産地（農園の所在地）が対象地域の出品だけ
+    where: {
+      id: { in: listings.map((l) => l.id) },
+      status: "PUBLISHED",
+      acceptDeadlineAt: { gt: now },
+      farmer: { prefecture: { in: [...SERVICE_PREFECTURES] } },
+    },
     include: {
       farmer: {
         select: { id: true, farmName: true, city: true, prefecture: true, mapVisible: true, responseGuide: true, user: { select: { createdAt: true } } },
@@ -201,6 +199,7 @@ export async function searchListings(db: Db, restaurantUserId: string, p: Search
       description: l.description,
       selfDeclaredFeatures: l.selfDeclaredFeatures,
       sizeLabel: l.sizeLabel,
+      trialOffered: Boolean(l.trialEnabled && l.trialSetGrams && l.trialSetPriceYen && l.trialSetCount),
       unitPriceYenPerKg: l.unitPriceYenPerKg,
       minOrderGrams: l.minOrderGrams,
       orderStepGrams: l.orderStepGrams,

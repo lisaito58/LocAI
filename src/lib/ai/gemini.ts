@@ -27,11 +27,13 @@ export function geminiModel() {
   return process.env.GEMINI_MODEL || DEFAULT_MODEL;
 }
 
-async function generateJson<T>(
+export async function generateJson<T>(
   task: string,
   data: unknown,
   jsonSchema: object,
   schema: z.ZodType<T>,
+  systemInstruction: string = SYSTEM_RULES,
+  timeoutMs: number = TIMEOUT_MS,
 ): Promise<T | null> {
   const ai = getClient();
   if (!ai) return null;
@@ -45,11 +47,11 @@ async function generateJson<T>(
         },
       ],
       config: {
-        systemInstruction: SYSTEM_RULES,
+        systemInstruction,
         responseMimeType: "application/json",
         responseJsonSchema: jsonSchema,
         temperature: 0.4,
-        abortSignal: AbortSignal.timeout(TIMEOUT_MS),
+        abortSignal: AbortSignal.timeout(timeoutMs),
       },
     });
     const parsed = schema.safeParse(JSON.parse(res.text ?? ""));

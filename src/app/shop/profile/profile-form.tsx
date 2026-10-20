@@ -8,7 +8,16 @@ import { markDirty } from "@/components/logout-button";
 import { PhoneField } from "@/components/phone-field";
 import { useKeepForm } from "@/components/use-keep-form";
 
-type Initial = { shopName: string; prefecture: string; city: string; addressLine: string; contactPhone: string; postalCode: string } | null;
+type Initial = {
+  shopName: string;
+  prefecture: string;
+  city: string;
+  town: string;
+  addressLine: string;
+  building: string;
+  contactPhone: string;
+  postalCode: string;
+} | null;
 
 export function RestaurantProfileForm({ initial }: { initial: Initial }) {
   const [state, onSubmit, pending] = useKeepForm(saveRestaurantProfile);
@@ -23,10 +32,17 @@ export function RestaurantProfileForm({ initial }: { initial: Initial }) {
         <TextInput name="shopName" defaultValue={initial?.shopName} required maxLength={50} />
       </Field>
       <AddressFields
-        initial={{ prefecture: initial?.prefecture ?? "大阪府", city: initial?.city, addressLine: initial?.addressLine, postalCode: initial?.postalCode }}
+        initial={{
+          prefecture: initial?.prefecture ?? "大阪府",
+          city: initial?.city,
+          town: initial?.town,
+          addressLine: initial?.addressLine,
+          building: initial?.building,
+          postalCode: initial?.postalCode,
+        }}
         errors={e}
-        prefectureHint="配送先の地域として、送料の計算に使います"
-        addressHint="🔒 番地・建物名と電話番号は、販売確定した取引の相手だけに表示されます。すでに確定した注文の届け先は変わりません。"
+        prefectureHint="届け先の地域として送料の計算に使います（関西2府4県）"
+        privateNote="町域・番地・建物名と電話番号は、販売確定した取引の相手だけに表示されます。すでに確定した注文の届け先は変わりません。"
       />
       <PhoneField label="🔒 電話番号" defaultValue={initial?.contactPhone} serverErrors={e?.contactPhone} />
       <FormMessage message={state?.message} tone={state?.ok ? "ok" : "error"} />

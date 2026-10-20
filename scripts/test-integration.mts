@@ -3,7 +3,7 @@
 // このテストが作ったデータ（メールが it-<実行ID>-...@example.invalid）だけを、最後に削除する。
 import "./load-env";
 import assert from "node:assert/strict";
-import { closeListing, createListing, republishListing, updateListing } from "../src/lib/domain/listings";
+import { closeListing, createListing, republishListing, updateListing, updateShippingRates, updateTrialSettings } from "../src/lib/domain/listings";
 import * as orders from "../src/lib/domain/orders";
 import * as records from "../src/lib/domain/records";
 import * as loss from "../src/lib/domain/loss";
@@ -593,6 +593,112 @@ try {
     assert.ok(again.ok, "案内は注文を禁止しない");
     const st = await stock(L);
     assert.ok(st.sold + st.held <= st.total);
+  });
+  await check("19. 送料表の編集：既存注文の送料・総額は変わらず、新しい申込だけ新しい送料／重なりはエラー", async () => {
+    const L = await newListing(F2, { totalKg: 10000, minKg: 1000, stepKg: 1000, price: 500 });
+    const opt = await prisma.deliveryOption.findFirstOrThrow({ where: { listingId: L, active: true } });
+    const o1 = okId(await order(R1, L, 2));
+    const before = await prisma.order.findUniqueOrThrow({ where: { id: o1 } });
+    const bad = await updateShippingRates(prisma, {
+      farmerUserId: F2, listingId: L, deliveryOptionId: opt.id,
+      rates: [
+        { prefecture: "大阪府", minGramsExclusive: 0, maxGramsInclusive: 3000, feeYen: 900 },
+        { prefecture: "大阪府", minGramsExclusive: 2000, maxGramsInclusive: 5000, feeYen: 1000 },
+      ],
+    });
+    assert.ok(!bad.ok, "重なる重量帯は保存できない");
+    const other = await updateShippingRates(prisma, {
+      farmerUserId: F, listingId: L, deliveryOptionId: opt.id,
+      rates: [{ prefecture: "大阪府", minGramsExclusive: 0, maxGramsInclusive: 5000, feeYen: 1 }],
+    });
+    assert.ok(!other.ok, "他の農家は送料表を変更できない");
+    const r = await updateShippingRates(prisma, {
+      farmerUserId: F2, listingId: L, deliveryOptionId: opt.id,
+      rates: [
+        { prefecture: "大阪府", minGramsExclusive: 0, maxGramsInclusive: 2000, feeYen: 950 },
+        { prefecture: "大阪府", minGramsExclusive: 2000, maxGramsInclusive: 10000, feeYen: 1500 },
+        { prefecture: "京都府", minGramsExclusive: 0, maxGramsInclusive: 10000, feeYen: 0 },
+      ],
+    });
+    assert.ok(r.ok, r.ok ? "" : r.error);
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: o1 } });
+    assert.equal(after.shippingFeeYen, before.shippingFeeYen, "既存注文の送料は変わらない");
+    assert.equal(after.totalYen, before.totalYen);
+    const o2 = await prisma.order.findUniqueOrThrow({ where: { id: okId(await order(R2, L, 2)) } });
+    assert.equal(o2.shippingFeeYen, 950, "新しい申込は新しい送料");
+    assert.equal(o2.totalYen, 1000 + 950);
+    await assertInvariant(L);
+  });
+
+  await check("20. お試しセット：数量・価格はサーバーで決まり、同じ農家につき1店1回、農家の見送りは回数に数えない", async () => {
+    const FT = await makeUser("FARMER", "ft", "京都府");
+    const L = await newListing(FT, { totalKg: 10000, minKg: 2000, stepKg: 1000, price: 800 });
+    const L2 = await newListing(FT, { totalKg: 10000, minKg: 2000, stepKg: 1000, price: 800 });
+    assert.ok(!(await order(R1, L, 1, { isTrial: true })).ok, "お試し未設定なら申し込めない");
+    assert.ok((await updateTrialSettings(prisma, { farmerUserId: FT, listingId: L, enabled: true, setGrams: 1000, priceYen: 300, count: 2 })).ok);
+    assert.ok((await updateTrialSettings(prisma, { farmerUserId: FT, listingId: L2, enabled: true, setGrams: 1000, priceYen: 300, count: 2 })).ok);
+    assert.ok(!(await updateTrialSettings(prisma, { farmerUserId: F, listingId: L, enabled: true, setGrams: 1000, priceYen: 1, count: 2 })).ok, "他の農家は設定できない");
+    // 店が送った数量（5kg）は使わず、お試しセットの量と価格で計算する
+    const t1 = await prisma.order.findUniqueOrThrow({ where: { id: okId(await order(R1, L, 5, { isTrial: true })) } });
+    assert.equal(t1.isTrial, true);
+    assert.equal(t1.quantityGrams, 1000);
+    assert.equal(t1.totalYen, 300 + 800);
+    assert.ok(!(await order(R1, L2, 1, { isTrial: true })).ok, "同じ農家の別の出品でも、2回目のお試しはできない");
+    assert.ok((await order(R1, L, 2)).ok, "通常の注文はできる");
+    const proposal = await orders.proposeChange(prisma, { orderId: t1.id, farmerUserId: FT, newQuantityGrams: 1000, newScheduleSlotId: t1.scheduleSlotId });
+    assert.ok(!proposal.ok, "お試しは条件変更できない（承認か見送り）");
+    const t2 = okId(await order(R2, L, 1, { isTrial: true }));
+    assert.ok(!(await order(R3, L, 1, { isTrial: true })).ok, "残りセットがない");
+    assert.ok((await orders.declineOrder(prisma, { orderId: t2, farmerUserId: FT })).ok);
+    assert.ok((await order(R2, L, 1, { isTrial: true })).ok, "農家が見送ったお試しは回数に数えない");
+    await assertInvariant(L);
+  });
+
+  await check("21. お試しセット：同時申込で設定セット数を超えない／農家の1日上限（受け渡し日ごと）を守る", async () => {
+    const FC = await makeUser("FARMER", "fc", "京都府");
+    const L = await newListing(FC, { totalKg: 10000, minKg: 1000, stepKg: 1000, price: 800 });
+    assert.ok((await updateTrialSettings(prisma, { farmerUserId: FC, listingId: L, enabled: true, setGrams: 1000, priceYen: 300, count: 1 })).ok);
+    const rs = await Promise.all([R1, R2, R3].map((r) => order(r, L, 1, { isTrial: true })));
+    assert.equal(rs.filter((r) => r.ok).length, 1, "1セットに同時申込しても成功は1件");
+    await assertInvariant(L);
+
+    const FD = await makeUser("FARMER", "fd", "京都府");
+    await prisma.farmerProfile.update({ where: { userId: FD }, data: { trialDailyLimit: 1 } });
+    const L2 = await newListing(FD, { totalKg: 10000, minKg: 1000, stepKg: 1000, price: 800 });
+    assert.ok((await updateTrialSettings(prisma, { farmerUserId: FD, listingId: L2, enabled: true, setGrams: 1000, priceYen: 300, count: 5 })).ok);
+    const opt = await prisma.deliveryOption.findFirstOrThrow({ where: { listingId: L2 }, include: { scheduleSlots: { orderBy: { startsAt: "asc" } } } });
+    assert.ok((await order(R1, L2, 1, { isTrial: true })).ok);
+    assert.ok(!(await order(R2, L2, 1, { isTrial: true })).ok, "同じ受け渡し日は1日上限で止まる");
+    const nextDay = await order(R2, L2, 1, { isTrial: true, scheduleSlotId: opt.scheduleSlots[1].id });
+    assert.ok(nextDay.ok, nextDay.ok ? "" : `別の受け渡し日なら申し込める：${nextDay.error}`);
+    await assertInvariant(L2);
+  });
+
+  await check("22. 農家さんへの質問：同じ出品は同じ会話を続け、未読・終了・当事者だけを守る", async () => {
+    const L = await newListing(F2, { totalKg: 5000, minKg: 1000, stepKg: 1000, price: 500 });
+    const a = await records.openInquiry(prisma, { listingId: L, restaurantUserId: R3, body: "送料を教えてください" });
+    if (!a.ok) throw new Error(a.error);
+    const b = await records.openInquiry(prisma, { listingId: L, restaurantUserId: R3, body: "もう一つ質問です" });
+    assert.ok(b.ok && b.inquiryId === a.inquiryId, "同じ出品へのやり取り中の質問は1つの会話にまとまる");
+    assert.equal((await records.listMyInquiries(prisma, F2, "FARMER")).find((i) => i.id === a.inquiryId)?.unread, true, "農家に未読が付く");
+    assert.equal((await records.listMyInquiries(prisma, R3, "RESTAURANT")).find((i) => i.id === a.inquiryId)?.unread, false);
+    await records.markInquiryRead(prisma, { inquiryId: a.inquiryId, userId: F2 });
+    assert.equal((await records.listMyInquiries(prisma, F2, "FARMER")).find((i) => i.id === a.inquiryId)?.unread, false, "開くと既読");
+    const intruder = await records.postInquiryMessage(prisma, { inquiryId: a.inquiryId, userId: R1, body: "のぞき見" });
+    assert.ok(!intruder.ok, "当事者以外は書き込めない");
+    assert.equal((await records.listMyInquiries(prisma, R1, "RESTAURANT")).some((i) => i.id === a.inquiryId), false, "当事者以外の一覧に出ない");
+    const st = await stock(L);
+    assert.equal(st.held, 0, "質問では在庫を確保しない");
+    assert.ok((await closeListing(prisma, { farmerUserId: F2, listingId: L })).ok);
+    assert.ok((await records.postInquiryMessage(prisma, { inquiryId: a.inquiryId, userId: F2, body: "受付は終わりましたが回答します" })).ok, "出品の受付終了では会話は終わらない");
+    assert.ok((await records.closeInquiry(prisma, { inquiryId: a.inquiryId, userId: R3 })).ok);
+    assert.ok(!(await records.postInquiryMessage(prisma, { inquiryId: a.inquiryId, userId: R3, body: "追加" })).ok, "終えた会話には書き込めない");
+  });
+
+  await check("23. 関西2府4県以外の農家は出品できない", async () => {
+    const FO = await makeUser("FARMER", "fo", "茨城県");
+    const r = await createListing(prisma, { farmerUserId: FO, data: listingInput({ totalKg: 1000, minKg: 1000, stepKg: 1000, price: 500 }), photo: PHOTO });
+    assert.ok(!r.ok, "対象地域外では出品できない");
   });
 } finally {
   // このテストで作ったデータだけを削除する

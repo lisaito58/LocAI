@@ -83,22 +83,48 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
   const by = q.by ?? "";
   const useEnd = /^\d{4}-\d{2}-\d{2}$/.test(use) ? endOfJstDay(use) : null;
 
-  const choices = listing.deliveryOptions.flatMap((o) =>
-    o.scheduleSlots
-      .filter((s) => !useEnd || s.startsAt < useEnd)
-      .map((s) => ({
+  // 受け取り日程の選択肢（農家が登録した実際の日程だけ）
+  //   通常の候補：使用日の3日前から使用日まで（目安。保存期間・鮮度の保証ではない）
+  //   それより前：「前の日程も表示する」を選んだときだけ
+  //   使用日より後：候補に入れない（使用日を変えると選べる）。申込時もサーバーで確認する
+  const useStart = useEnd ? new Date(useEnd.getTime() - 86_400_000) : null;
+  const nearFrom = useStart ? new Date(useStart.getTime() - 3 * 86_400_000) : null;
+  const showEarly = q.early === "1";
+  const allSlots = listing.deliveryOptions.flatMap((o) =>
+    o.scheduleSlots.map((s) => {
+      const full = s.capacity !== null && s.usedCount >= s.capacity;
+      const sameDay = useStart && useEnd ? s.startsAt >= useStart && s.startsAt < useEnd : false;
+      return {
         value: `${o.id}:${s.id}`,
-        label: `${DELIVERY_METHOD_LABELS[o.method]} ・ ${formatJst(s.startsAt)}${s.capacity !== null && s.usedCount >= s.capacity ? "（満枠）" : ""}`,
-        full: s.capacity !== null && s.usedCount >= s.capacity,
-      })),
+        startsAt: s.startsAt,
+        label: `${DELIVERY_METHOD_LABELS[o.method]} ・ ${formatJst(s.startsAt)}${sameDay ? "（使用日当日：時間に間に合うか確認）" : ""}${full ? "（満枠）" : ""}`,
+        full,
+      };
+    }),
   );
+  const nearChoices = useEnd && nearFrom ? allSlots.filter((c) => c.startsAt >= nearFrom && c.startsAt < useEnd) : [];
+  const earlyChoices = useEnd && nearFrom ? allSlots.filter((c) => c.startsAt < nearFrom) : [];
+  const laterCount = useEnd ? allSlots.filter((c) => c.startsAt >= useEnd).length : 0;
   const [optionId, slotId] = (q.choice ?? "").split(":");
 
   let quote: Awaited<ReturnType<typeof quoteOrder>> | null = null;
-  const grams = kgTextToGrams(purchaseKg);
+  // お試しセット（任意）：残りセット数と、この店が使えるか（同じ農家につき1回）
+  const ACTIVE = ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT", "CONFIRMED"] as const;
+  const trialOffered = listing.trialEnabled && listing.trialSetGrams && listing.trialSetPriceYen && listing.trialSetCount !== null;
+  const trialUsed = trialOffered ? await prisma.order.count({ where: { listingId: listing.id, isTrial: true, status: { in: [...ACTIVE] } } }) : 0;
+  const trialRemaining = trialOffered ? Math.max(0, listing.trialSetCount! - trialUsed) : 0;
+  const myTrial = trialOffered
+    ? await prisma.order.findFirst({ where: { restaurantId: profile.id, farmerId: listing.farmerId, isTrial: true, status: { in: [...ACTIVE] } }, select: { status: true } })
+    : null;
+  const trialChoosable = Boolean(trialOffered && trialRemaining > 0 && !myTrial);
+  const isTrial = q.kind === "trial" && trialChoosable;
+
+  const grams = isTrial ? listing.trialSetGrams! : kgTextToGrams(purchaseKg);
   const byDate = jstLocalToDate(by);
   if (q.choice && grams !== null && byDate && budget && use) {
     quote = await quoteOrder(prisma, {
+      isTrial,
+      restaurantId: profile.id,
       listingId: listing.id,
       deliveryOptionId: optionId,
       scheduleSlotId: slotId,
@@ -113,11 +139,11 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
   // 前回のロス記録による注文前の案内（記録がなければ出さない）
   const lossWarning = quote?.ok ? await getLossWarning(prisma, profile.id, listing.itemName) : null;
 
-  const myOrders = await prisma.order.findMany({
-    where: { restaurant: { userId: profile.userId }, listingId: { not: listing.id }, status: { in: ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT", "CONFIRMED"] } },
+  // この出品への質問が続いていれば、その会話に案内する
+  const openInquiry = await prisma.listingInquiry.findFirst({
+    where: { listingId: listing.id, restaurantId: profile.id, status: "OPEN", primaryOrderId: null },
     orderBy: { createdAt: "desc" },
-    take: 20,
-    select: { id: true, snapItemName: true, quantityGrams: true, useDate: true, farmer: { select: { farmName: true } } },
+    select: { id: true },
   });
   // 申込フォーム（前回のロス記録による案内がある場合は、その後に表示する）
   const orderForm = quote?.ok ? (
@@ -132,6 +158,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         useDate: use,
         purchaseConfirmByAt: by,
         expectedTotalYen: String(quote.quote.totalYen),
+        ...(isTrial && { isTrial: "1" }),
         ...(q.inquiry && { inquiryId: q.inquiry }),
       }}
     />
@@ -220,7 +247,12 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             </div>
             <div className="mt-1 flex flex-wrap gap-1 text-xs">
               {o.shippingRates.length === 0 ? (
-                <span className="badge bg-amber-100 text-amber-800">{profile.prefecture}への送料は未設定（相談のみ）</span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="badge bg-amber-100 px-3 py-1 text-sm text-amber-950">{profile.prefecture}への送料は未設定</span>
+                  <a href={`${searchHref(q, { ask: "shipping" }, `/shop/listings/${listing.id}`)}#ask`} className="btn-secondary btn-sm">
+                    📮 送料を問い合わせる
+                  </a>
+                </span>
               ) : (
                 o.shippingRates.map((r) => (
                   <span key={r.id} className="badge bg-white">
@@ -242,14 +274,46 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         ) : (
           <>
             <p className="hint">申し込む前に、下の条件をすべて入れて「合計と期限を確認する」を押してください。</p>
-            <form className="grid gap-3 sm:grid-cols-2" action={`/shop/listings/${listing.id}#order`}>
+            {trialOffered && (
+              <div className="rounded-2xl border-2 border-orange-200 bg-orange-50/70 p-3">
+                <p className="font-bold text-orange-950">
+                  🧺 お試しセット：1セット{formatKg(listing.trialSetGrams!)}・商品代{formatYen(listing.trialSetPriceYen!)}（送料は別。残り{trialRemaining}セット）
+                </p>
+                <p className="text-sm">
+                  通常の注文の前に少量を試せます（農家さんの承認制・同じ農家さんにつき1回）。お試しを使わなくても、通常の注文はできます。
+                  {myTrial && (myTrial.status === "CONFIRMED" ? " この農家さんのお試しは利用済みです。" : " この農家さんのお試しを申込中です。")}
+                  {!myTrial && trialRemaining === 0 && " いまはお試しセットの残りがありません。"}
+                </p>
+              </div>
+            )}
+            <form className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2" action={`/shop/listings/${listing.id}#order`}>
               {Object.entries(q)
-                .filter(([k]) => !["purchaseKg", "purchase", "budget", "use", "by", "choice"].includes(k))
+                .filter(([k]) => !["purchaseKg", "purchase", "budget", "use", "by", "choice", "early", "kind"].includes(k))
                 .map(([k, v]) => (
                   <input key={k} type="hidden" name={k} value={v} />
                 ))}
-              <Labeled label="⚖️ 購入する量（kg）">
-                <input name="purchaseKg" className="input" inputMode="decimal" defaultValue={purchaseKg} required />
+              {trialChoosable && (
+                <fieldset className="flex flex-col gap-2 sm:col-span-2">
+                  <legend className="label mb-1">申し込む内容</legend>
+                  <div className="flex flex-col gap-2 min-[420px]:flex-row">
+                    <label className="flex min-h-11 items-center gap-2 rounded-lg border-2 border-green-200 bg-white px-3 font-bold has-checked:border-leaf has-checked:bg-leaf-light">
+                      <input type="radio" name="kind" value="normal" defaultChecked={!isTrial} className="size-5 accent-green-700" />
+                      通常の注文
+                    </label>
+                    <label className="flex min-h-11 items-center gap-2 rounded-lg border-2 border-orange-200 bg-white px-3 font-bold has-checked:border-orange-500 has-checked:bg-orange-50">
+                      <input type="radio" name="kind" value="trial" defaultChecked={isTrial} className="size-5 accent-orange-600" />
+                      🧺 お試しセット（{formatKg(listing.trialSetGrams!)}）
+                    </label>
+                  </div>
+                </fieldset>
+              )}
+              <Labeled label="⚖️ 購入する量（kg）" required={!isTrial}>
+                <input name="purchaseKg" className="input" inputMode="decimal" defaultValue={purchaseKg} required={!isTrial} />
+                {trialChoosable && (
+                  <span className="hint">
+                    {isTrial ? `お試しセットでは、この欄は使わず1セット（${formatKg(listing.trialSetGrams!)}）で申し込みます。` : "お試しセットを選んだ場合は、1セットの量で申し込みます。"}
+                  </span>
+                )}
               </Labeled>
               <Labeled label="💴 送料込み予算（円）">
                 <input name="budget" className="input" inputMode="numeric" defaultValue={budget} required />
@@ -260,20 +324,56 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
               <Labeled label="⏰ 仕入れ確定希望時刻">
                 <input name="by" type="datetime-local" className="input" defaultValue={by} required />
               </Labeled>
-              <Labeled label="📅 受け渡し方法と日程（使用日以前）">
-                <select name="choice" className="input" defaultValue={q.choice ?? ""} required>
-                  <option value="" disabled>
-                    選んでください
-                  </option>
-                  {choices.map((c) => (
-                    <option key={c.value} value={c.value} disabled={c.full}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </Labeled>
-              <div className="flex items-end">
-                <button className="btn-secondary w-full">🧮 合計と期限を確認する</button>
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                {!useEnd ? (
+                  <p className="rounded-xl bg-[#fbf0e6] px-3 py-2 text-sm text-[#3d3a37]">
+                    使用日を入れて下のボタンを押すと、使用日までに受け取れる日程が選べるようになります。
+                  </p>
+                ) : (
+                  <Labeled label="📅 受け取り方法と日程">
+                    <select name="choice" className="input" defaultValue={q.choice ?? ""} required>
+                      <option value="" disabled>
+                        選んでください
+                      </option>
+                      {nearChoices.length > 0 && (
+                        <optgroup label="使用日の3日前〜当日（目安）">
+                          {nearChoices.map((c) => (
+                            <option key={c.value} value={c.value} disabled={c.full}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {showEarly && earlyChoices.length > 0 && (
+                        <optgroup label="それより前の日程">
+                          {earlyChoices.map((c) => (
+                            <option key={c.value} value={c.value} disabled={c.full}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </Labeled>
+                )}
+                {useEnd && nearChoices.length === 0 && (
+                  <p className="text-sm">使用日の3日前〜当日に受け取れる日程はありません。</p>
+                )}
+                {useEnd && earlyChoices.length > 0 && (
+                  <label className="flex min-h-11 items-center gap-2 text-sm">
+                    <input type="checkbox" name="early" value="1" defaultChecked={showEarly} className="size-5 accent-green-700" />
+                    それより前の日程（{earlyChoices.length}件）も選択肢に表示する
+                  </label>
+                )}
+                {laterCount > 0 && (
+                  <p className="text-sm">使用日より後の日程が{laterCount}件あります。その日程で受け取りたい場合は、使用日を変えてもう一度確認してください。</p>
+                )}
+                <p className="hint">
+                  日程は農家さんが登録した「お店が受け取る予定の日時」です（宅配の場合も発送日ではありません）。届く時間は前後することがあるので、使う時間に間に合うかは相談欄で確認できます。3日前〜当日は目安で、保存できる期間や鮮度を保証するものではありません。
+                </p>
+              </div>
+              <div className="sm:col-span-2">
+                <button className="btn-secondary w-full">{useEnd ? "🧮 合計と期限を確認する" : "📅 受け取れる日程を表示する"}</button>
               </div>
             </form>
 
@@ -282,7 +382,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
               <div className="flex flex-col gap-3">
                 <div className="rounded-3xl border-2 border-leaf bg-leaf-light/40 p-4">
                   <div className="grid gap-2 text-sm min-[400px]:grid-cols-2 sm:grid-cols-4">
-                    <Info label="数量" value={formatKg(quote.quote.quantityGrams)} />
+                    <Info label={isTrial ? "数量（お試しセット）" : "数量"} value={formatKg(quote.quote.quantityGrams)} />
                     <Info label="商品代" value={formatYen(quote.quote.itemSubtotalYen)} />
                     <Info label="送料" value={quote.quote.shippingFeeYen === 0 ? "0円" : formatYen(quote.quote.shippingFeeYen)} />
                     <Info label="合計（アプリが計算）" value={formatYen(quote.quote.totalYen)} strong />
@@ -311,36 +411,38 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         )}
       </section>
 
-      {/* 予備相談 */}
-      <section className="card-soft flex flex-col gap-3">
-        <h2 className="section-title">💬 この出品について相談する</h2>
-        <p className="rounded-2xl bg-white px-3 py-2 text-sm font-bold text-amber-800">
-          ⚠️ 購入希望ではなく、数量は確保されません（仮押さえなし）。
-        </p>
-        <p className="text-xs text-gray-700">
-          第一候補の注文が成立しなかったときの「予備」として相談できます。第一候補が回答待ち・確定の間は、予備から注文に進めません。複数の農家さんから実際に買う場合は、別の購入予定として通常どおり申し込んでください。
-        </p>
+      {/* 農家さんへの質問（購入希望とは別。在庫は確保されない） */}
+      <section id="ask" className="card-soft flex scroll-mt-24 flex-col gap-3">
+        <h2 className="section-title">💬 農家さんに質問する</h2>
+        <p className="rounded-xl bg-white px-3 py-2 text-sm font-bold">メッセージだけでは注文や在庫の確保はされません。</p>
+        {openInquiry && (
+          <p className="text-sm">
+            この出品への質問が続いています。
+            <Link href={`/inquiries/${openInquiry.id}`} className="link ml-1">
+              これまでのやり取りを見る
+            </Link>
+            （ここから送ると、同じ相談に続けて書き込まれます）
+          </p>
+        )}
         <ActionButton
           action={openInquiryAction.bind(null, listing.id)}
-          className="btn-secondary btn-sm self-start"
+          className="btn-secondary self-start"
           fields={
-            <>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="label">第一候補の注文（予備相談の場合）</span>
-                <select name="primaryOrderId" className="input" defaultValue="">
-                  <option value="">紐付けない（送料などの相談）</option>
-                  {myOrders.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.snapItemName} {formatKg(o.quantityGrams)}（{o.farmer.farmName}・使用日 {formatDateOnly(o.useDate)}）
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <textarea name="body" required maxLength={500} rows={3} className="input" placeholder="例：第一候補がだめだった場合、3kgお願いできますか？" />
-            </>
+            <label className="flex flex-col gap-1">
+              <span className="label">質問の内容（500文字以内）</span>
+              <textarea
+                name="body"
+                required
+                maxLength={500}
+                rows={3}
+                className="input"
+                defaultValue={q.ask === "shipping" ? `${profile.prefecture}${q.purchaseKg || q.qty ? `への${q.purchaseKg || q.qty}kgの` : "への"}送料を教えてください。` : ""}
+                placeholder="例：大阪市への送料を教えてください／野菜の大きさを教えてください"
+              />
+            </label>
           }
         >
-          💬 相談を送る
+          ✉️ 質問を送る
         </ActionButton>
       </section>
     </div>
@@ -357,12 +459,12 @@ function Info({ label, value, strong }: { label: string; value: string; strong?:
 }
 
 // 申し込み前に必要な条件なので「必須」と表示する（一覧の閲覧では任意）
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+function Labeled({ label, children, required = true }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="label">
         {label}
-        <ReqMark required />
+        <ReqMark required={required} />
       </span>
       {children}
     </label>

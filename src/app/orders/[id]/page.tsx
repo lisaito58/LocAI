@@ -21,7 +21,7 @@ import { ReviewForm } from "@/components/reviews";
 import { itemEmoji, Loading, Notice, Page, StatusBadge } from "@/components/ui";
 import { estimateReceipt } from "@/lib/domain/estimate";
 import { PAYMENT_STATUS_LABELS } from "@/lib/domain/order-labels";
-import { expireDueOrders } from "@/lib/domain/orders";
+import { expireDueOrders, fullAddress } from "@/lib/domain/orders";
 import { dbNow } from "@/lib/domain/tx";
 import { formatDateOnly, formatJst, formatKg, formatYen, gramsToKgText } from "@/lib/domain/units";
 import { requireUser } from "@/lib/guard";
@@ -58,8 +58,8 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
   const order = await prisma.order.findUniqueOrThrow({
     where: { id },
     include: {
-      farmer: { select: { userId: true, farmName: true, prefecture: true, city: true, addressLine: true, contactPhone: true } },
-      restaurant: { select: { userId: true, shopName: true, prefecture: true, city: true, addressLine: true, contactPhone: true } },
+      farmer: { select: { userId: true, farmName: true, prefecture: true, city: true, town: true, addressLine: true, building: true, contactPhone: true } },
+      restaurant: { select: { userId: true, shopName: true, prefecture: true, city: true, town: true, addressLine: true, building: true, contactPhone: true } },
       changeProposal: true,
       payment: true,
       fulfillment: true,
@@ -82,14 +82,14 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
         label: "お店",
         name: order.restaurant.shopName,
         area: `${order.restaurant.prefecture}${order.restaurant.city}`,
-        address: order.snapRestaurantAddress ?? `${order.restaurant.prefecture}${order.restaurant.city}${order.restaurant.addressLine}`,
+        address: order.snapRestaurantAddress ?? fullAddress(order.restaurant),
         phone: order.snapRestaurantPhone ?? order.restaurant.contactPhone,
       }
     : {
         label: "農家さん",
         name: order.farmer.farmName,
         area: `${order.farmer.prefecture}${order.farmer.city}`,
-        address: order.snapFarmerAddress ?? `${order.farmer.prefecture}${order.farmer.city}${order.farmer.addressLine}`,
+        address: order.snapFarmerAddress ?? fullAddress(order.farmer),
         phone: order.snapFarmerPhone ?? order.farmer.contactPhone,
       };
   const contactFromSnapshot = Boolean(isFarmer ? order.snapRestaurantAddress : order.snapFarmerAddress);
@@ -129,6 +129,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
       <section className="card flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={order.status} />
+          {order.isTrial && <span className="badge bg-orange-100 text-orange-900">🧺 お試しセット</span>}
           {order.hasConsultation && <span className="badge bg-sky-100 text-sky-800">💬 相談あり</span>}
           {order.needsDiscussion && <span className="badge bg-red-100 text-red-700">🚩 要相談</span>}
         </div>
@@ -452,7 +453,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
           <ul className="flex flex-col gap-2">
             {order.messages.map((m) => (
               <li key={m.id} className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.senderId === user.id ? "self-end bg-leaf text-white" : "self-start bg-leaf-light"}`}>
-                <div className="text-xs opacity-70">
+                <div className="text-xs font-bold">
                   {names.get(m.senderId)} ・ {formatJst(m.createdAt)}
                 </div>
                 <p className="whitespace-pre-wrap">{m.body}</p>

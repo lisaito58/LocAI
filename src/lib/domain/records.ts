@@ -214,10 +214,21 @@ export async function openInquiry(
       if (primary.listingId === listing.id) fail("第一候補と同じ出品は予備にできません");
     }
     const body = checkBody(input.body);
-    const inquiry = await tx.listingInquiry.create({
-      data: { listingId: listing.id, restaurantId: restaurant.id, primaryOrderId: input.primaryOrderId ?? null },
-    });
+    const now = await dbNow(tx);
+    // 同じ出品への質問が続いていれば、新しく作らずそこに書き足す（会話を分けない）
+    const existing = input.primaryOrderId
+      ? null
+      : await tx.listingInquiry.findFirst({
+          where: { listingId: listing.id, restaurantId: restaurant.id, status: "OPEN", primaryOrderId: null },
+          orderBy: { createdAt: "desc" },
+        });
+    const inquiry =
+      existing ??
+      (await tx.listingInquiry.create({
+        data: { listingId: listing.id, restaurantId: restaurant.id, primaryOrderId: input.primaryOrderId ?? null, restaurantReadAt: now },
+      }));
     await tx.inquiryMessage.create({ data: { inquiryId: inquiry.id, senderId: input.restaurantUserId, body } });
+    await tx.listingInquiry.update({ where: { id: inquiry.id }, data: { restaurantReadAt: now } });
     return { inquiryId: inquiry.id };
   });
 }
@@ -236,9 +247,15 @@ async function loadInquiryParty(tx: Tx | Db, inquiryId: string, userId: string) 
 
 export async function postInquiryMessage(db: Db, input: { inquiryId: string; userId: string; body: string }): Promise<Result> {
   return runTx(db, async (tx) => {
-    const { inquiry } = await loadInquiryParty(tx, input.inquiryId, input.userId);
-    if (inquiry.status !== "OPEN") fail("この相談は終了しています");
+    const { inquiry, party } = await loadInquiryParty(tx, input.inquiryId, input.userId);
+    // 出品の受付終了や注文への切り替えとは関係なく、明示的に「終える」まで会話を続けられる
+    if (inquiry.status === "CLOSED") fail("この相談は終えています。新しく質問してください");
     await tx.inquiryMessage.create({ data: { inquiryId: inquiry.id, senderId: input.userId, body: checkBody(input.body) } });
+    const now = await dbNow(tx);
+    await tx.listingInquiry.update({
+      where: { id: inquiry.id },
+      data: party === "FARMER" ? { farmerReadAt: now } : { restaurantReadAt: now },
+    });
     return {};
   });
 }
@@ -253,3 +270,62 @@ export async function closeInquiry(db: Db, input: { inquiryId: string; userId: s
 }
 
 export { loadInquiryParty, loadParty };
+
+// 相談を開いたら、その人の既読時刻を更新する（画面を閉じても相談は終わらない）
+export async function markInquiryRead(db: Db, input: { inquiryId: string; userId: string }) {
+  const { inquiry, party } = await loadInquiryParty(db, input.inquiryId, input.userId);
+  const now = await dbNow(db);
+  await db.listingInquiry.update({
+    where: { id: inquiry.id },
+    data: party === "FARMER" ? { farmerReadAt: now } : { restaurantReadAt: now },
+  });
+}
+
+export type InquirySummary = {
+  id: string;
+  status: "OPEN" | "CONVERTED" | "CLOSED";
+  itemName: string;
+  listingId: string;
+  counterpart: string;
+  lastBody: string;
+  lastAt: Date;
+  lastFromMe: boolean;
+  unread: boolean; // 相手からのメッセージで、まだ開いていないものがある
+};
+
+// 自分が当事者の相談の一覧（新しいメッセージ順）
+export async function listMyInquiries(db: Db, userId: string, role: Party): Promise<InquirySummary[]> {
+  const rows = await db.listingInquiry.findMany({
+    where: role === "FARMER" ? { listing: { farmer: { userId } } } : { restaurant: { userId } },
+    take: 100,
+    include: {
+      listing: { select: { id: true, itemName: true, farmer: { select: { farmName: true } } } },
+      restaurant: { select: { shopName: true } },
+      messages: { orderBy: { createdAt: "desc" }, take: 1 },
+    },
+  });
+  return rows
+    .filter((r) => r.messages.length > 0)
+    .map((r) => {
+      const last = r.messages[0];
+      const myRead = role === "FARMER" ? r.farmerReadAt : r.restaurantReadAt;
+      const fromMe = last.senderId === userId;
+      return {
+        id: r.id,
+        status: r.status,
+        itemName: r.listing.itemName,
+        listingId: r.listing.id,
+        counterpart: role === "FARMER" ? r.restaurant.shopName : r.listing.farmer.farmName,
+        lastBody: last.body,
+        lastAt: last.createdAt,
+        lastFromMe: fromMe,
+        unread: !fromMe && (!myRead || last.createdAt > myRead),
+      };
+    })
+    .sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
+}
+
+// 新着の件数（相手からの未読メッセージがある相談の数）。注文の件数とは別に数える
+export async function countUnreadInquiries(db: Db, userId: string, role: Party): Promise<number> {
+  return (await listMyInquiries(db, userId, role)).filter((i) => i.unread && i.status !== "CLOSED").length;
+}

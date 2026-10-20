@@ -36,6 +36,7 @@ export function CandidateCard({
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {c.saleTargetReachable && <span className="badge bg-orange-100 text-orange-900">⏳ 早めに販売したい</span>}
+          {c.trialOffered && <span className="badge bg-orange-100 text-orange-900">🧺 お試しセットあり</span>}
           {c.isNewFarmer && <span className="badge bg-lime-100 text-lime-900">🌱 新しく参加</span>}
           {c.isRepeat && <span className="badge bg-pink-100 text-pink-900">💚 リピート</span>}
           <span className="badge bg-leaf-light text-leaf-dark">{DELIVERY_METHOD_LABELS[c.deliveryMethod]}</span>

@@ -98,6 +98,9 @@ async function Content() {
                   {l._count.orders > 0 && <span className="badge bg-amber-100 text-amber-800">⏳ 回答が必要 {l._count.orders}件</span>}
                   {l.inquiries.length > 0 && <span className="badge bg-sky-100 text-sky-800">💬 相談 {l.inquiries.length}件</span>}
                   <span className="flex-1" />
+                  <Link href={`/farm/listings/${l.id}/edit`} className="btn-secondary btn-sm">
+                    ✏️ 編集
+                  </Link>
                   <Link href={`/farm/listings/${l.id}/review`} className="btn-secondary btn-sm">
                     🔎 販売条件を見直す
                   </Link>

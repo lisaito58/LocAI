@@ -3,7 +3,7 @@
 // 共有端末で次の人に見えないよう、このブラウザの下書き（検索条件・出品の入力途中）も消す。
 import { signOut } from "@/app/auth-actions";
 
-export function LogoutButton() {
+export function LogoutButton({ variant = "page" }: { variant?: "page" | "menu" }) {
   return (
     <form
       action={signOut}
@@ -13,7 +13,7 @@ export function LogoutButton() {
           .filter(Boolean);
         const lines = ["ログアウトしますか？"];
         if (dirty.length) lines.push(`\n保存していない「${dirty.join("」「")}」の変更は失われます。`);
-        lines.push("\nこのブラウザに保存した入力途中の下書き（出品・検索条件）も消去されます。");
+        lines.push("\nこのブラウザに保存した入力途中の下書き（出品・検索条件）とAI相談の会話も消去されます。");
         if (!window.confirm(lines.join(""))) {
           e.preventDefault();
           return;
@@ -26,7 +26,10 @@ export function LogoutButton() {
         } catch {}
       }}
     >
-      <button type="submit" className="btn-danger w-full">
+      <button
+        type="submit"
+        className={variant === "menu" ? "btn w-full border-2 border-red-200 bg-white text-red-800 hover:bg-red-50" : "btn-danger w-full"}
+      >
         🚪 ログアウト
       </button>
     </form>

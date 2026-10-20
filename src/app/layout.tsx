@@ -14,7 +14,7 @@ const maru = Zen_Maru_Gothic({
 
 export const metadata: Metadata = {
   title: "LocAI｜地元の野菜を、必要な量で",
-  description: "地産地消・必要量でつながる野菜仕入れアプリ。農家と飲食店をつなぎます。",
+  description: "地産地消・必要量でつながる野菜仕入れアプリ。関西の農家と飲食店をつなぎます。",
 };
 
 export const viewport: Viewport = {

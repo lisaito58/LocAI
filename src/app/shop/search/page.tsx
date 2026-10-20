@@ -14,7 +14,7 @@ import { formatJst, gramsToKgText } from "@/lib/domain/units";
 import { requireRestaurant } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { cityPoint, prefecturePoint } from "@/lib/data/municipality-points";
-import { DELIVERY_METHOD_LABELS, PREFECTURES } from "@/lib/validation/listing";
+import { DELIVERY_METHOD_LABELS, isServicePrefecture, SERVICE_PREFECTURES } from "@/lib/validation/listing";
 import { ITEM_MODE_LABELS, newSeed, parseSearchQuery, searchHref, SORT_LABELS, type ParsedSearch } from "@/lib/validation/search";
 import { CandidateCard } from "./candidate-card";
 import { EditSearchButton } from "./edit-search-button";
@@ -71,6 +71,11 @@ async function Content({ searchParams }: Pick<PageProps<"/shop/search">, "search
 
   return (
     <div className="flex flex-col gap-6">
+      {!isServicePrefecture(profile.prefecture) && (
+        <Notice tone="warn">
+          登録済みの届け先（{profile.prefecture}）は対象地域外です。対象は関西2府4県です。<Link href="/shop/profile" className="link">マイページ</Link>で設定し直してください（これまでの注文の情報はそのまま残ります）。
+        </Notice>
+      )}
       <SearchForm key={raw.seed} initial={initial} prefecture={profile.prefecture} sort={raw.sort ?? "fair"} view={raw.view === "map" ? "map" : "list"} />
       {"errors" in parsed ? (
         <Notice tone="error">
@@ -161,9 +166,8 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
     areaMap.set(key, area);
   }
   const areas = [...areaMap.values()];
-  const mapCenter = prefecturePoint(result.prefecture) ?? areas[0]?.point ?? [34.99, 135.76];
-  const prefecturePoints = PREFECTURES.map((name) => ({ name, point: prefecturePoint(name) })).filter(
-    (x): x is { name: (typeof PREFECTURES)[number]; point: [number, number] } => x.point !== null,
+  const prefecturePoints = SERVICE_PREFECTURES.map((name) => ({ name, point: prefecturePoint(name) })).filter(
+    (x): x is { name: (typeof SERVICE_PREFECTURES)[number]; point: [number, number] } => x.point !== null,
   );
 
   return (
@@ -243,6 +247,7 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
           ) : (
             <CalmNotice title="条件に合う出品はありませんでした">
               <p>数量・予算・受け取り日などの条件を変えて、もう一度探してみてください。</p>
+              <p className="text-sm">いま適用中の条件は、上の「いま適用中の条件」に表示しています。数量・使用日・追加条件を外すと、候補が増えることがあります。</p>
               <p className="text-sm">いま受付中の出品は全部で {result.openCount}件あります。</p>
               <div className="flex flex-wrap gap-2">
                 <EditSearchButton />
@@ -259,7 +264,7 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
             {hiddenOnMap > 0 && (
               <p className="text-sm text-gray-700">地図に位置を表示していない出品が {hiddenOnMap}件あります（「📋 一覧で見る」で表示されます）。</p>
             )}
-            <FarmMap areas={areas} center={mapCenter} prefectures={prefecturePoints} />
+            <FarmMap areas={areas} prefectures={prefecturePoints} />
           </>
         ) : (
           <>
@@ -397,10 +402,20 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
           ) : (
             <>
               <p className="text-sm text-amber-900">
-                お店の地域・この数量の送料が登録されていないため、予算内かどうかは分かりません。購入希望は送れず、仮押さえもされません。相談して農家さんが送料を登録したら、最新の総額で申し込めます。
+                お店の地域・この数量の送料が登録されていないため、予算内かどうかは分かりません。購入希望は送れず、仮押さえもされません。「送料を問い合わせる」から農家さんに質問できます。農家さんが送料を登録したら、最新の総額で申し込めます。
               </p>
               {result.unsetShipping.map((c) => (
-                <CandidateCard key={c.listingId} c={c} href={detailHref(c)} wantedGrams={p.quantityGrams} />
+                <CandidateCard
+                  key={c.listingId}
+                  c={c}
+                  href={detailHref(c)}
+                  wantedGrams={p.quantityGrams}
+                  footer={
+                    <Link href={`${searchHref(raw, { ask: "shipping", purchaseKg: p.quantityGrams ? gramsToKgText(p.quantityGrams) : null, page: null }, `/shop/listings/${c.listingId}`)}#ask`} className="btn-secondary self-start">
+                      📮 送料を問い合わせる
+                    </Link>
+                  }
+                />
               ))}
             </>
           )}

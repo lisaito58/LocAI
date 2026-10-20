@@ -6,7 +6,9 @@ import { TodoCard } from "@/components/todo-card";
 import { Loading, Notice, Page } from "@/components/ui";
 import { expireDueOrders } from "@/lib/domain/orders";
 import { getFarmerTodo, SOON_HOURS, type FarmerTodo } from "@/lib/domain/todo";
+import { countUnreadInquiries } from "@/lib/domain/records";
 import { requireFarmer } from "@/lib/guard";
+import { isServicePrefecture } from "@/lib/validation/listing";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "ホーム | LocAI" };
@@ -38,6 +40,11 @@ async function Content() {
         </Notice>
       ) : (
         <>
+          {!isServicePrefecture(profile.prefecture) && (
+            <Notice tone="warn">
+              登録済みの所在地（{profile.prefecture}）は対象地域外です。対象は関西2府4県です。<Link href="/farm/profile" className="link">農園情報</Link>で設定し直すと出品できます（これまでの注文の情報はそのまま残ります）。
+            </Notice>
+          )}
           <Link href="/farm/listings/new" className="btn-primary py-4 text-xl">
             ＋ 野菜を出品する
           </Link>
@@ -45,7 +52,7 @@ async function Content() {
             <h2 id="todo-h" className="section-title">
               📋 今やること
             </h2>
-            <TodoList farmerId={profile.id} />
+            <TodoList farmerId={profile.id} userId={user.id} />
           </section>
           <section className="card-soft flex flex-wrap gap-2">
             <Link href="/farm/listings" className="btn-secondary btn-sm">
@@ -64,11 +71,13 @@ async function Content() {
   );
 }
 
-async function TodoList({ farmerId }: { farmerId: string }) {
+async function TodoList({ farmerId, userId }: { farmerId: string; userId: string }) {
   let todo: FarmerTodo;
+  let inquiries = 0;
   try {
     await expireDueOrders(prisma, { farmerId });
     todo = await getFarmerTodo(prisma, farmerId, new Date());
+    inquiries = await countUnreadInquiries(prisma, userId, "FARMER");
   } catch {
     return (
       <Notice tone="error">
@@ -98,6 +107,7 @@ async function TodoList({ farmerId }: { farmerId: string }) {
         count={todo.saleTargetSoon}
         sub={`${SOON_HOURS}時間以内・受付中で残りあり`}
       />
+      <TodoCard href="/inquiries" emoji="💬" label="返信が必要な相談" count={inquiries} sub="お店からの質問（注文とは別）" />
       {todo.waitingShopReagreement > 0 && (
         <TodoCard
           href="/farm/orders#reagreement"

@@ -5,12 +5,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { ActionResult } from "@/components/action-button";
 import { approveAllPlain } from "@/lib/domain/orders";
-import { closeListing, createListing, republishListing, updateListing, type PhotoUpload } from "@/lib/domain/listings";
+import { closeListing, createListing, republishListing, updateListing, updateShippingRates, updateTrialSettings, type PhotoUpload } from "@/lib/domain/listings";
+import { kgTextToGrams } from "@/lib/domain/units";
 import { allowAction, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { detectImageType, listingEditSchema, listingSchema, MAX_PHOTO_BYTES } from "@/lib/validation/listing";
 
-export type ListingFormState = { error?: string; fieldErrors?: Record<string, string[] | undefined> } | undefined;
+export type ListingFormState = { error?: string; message?: string; fieldErrors?: Record<string, string[] | undefined> } | undefined;
 
 async function readPhoto(formData: FormData): Promise<PhotoUpload | string> {
   const file = formData.get("photo");
@@ -65,21 +66,59 @@ export async function editListing(listingId: string, _prev: ListingFormState, fo
   const user = await requireUser("FARMER");
   const parsed = listingEditSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  const before = await prisma.listing.findFirst({ where: { id: listingId, farmer: { userId: user.id } } });
+  if (!before) return { error: "出品が見つかりません" };
+  const d = parsed.data;
   const r = await updateListing(prisma, {
     farmerUserId: user.id,
     listingId,
-    unitPriceYenPerKg: parsed.data.unitPriceYenPerKg,
-    totalGrams: parsed.data.totalKg,
-    description: parsed.data.description,
-    selfDeclaredFeatures: parsed.data.selfDeclaredFeatures,
-    conditionNote: parsed.data.conditionNote,
+    unitPriceYenPerKg: d.unitPriceYenPerKg,
+    totalGrams: d.totalKg,
+    description: d.description,
+    selfDeclaredFeatures: d.selfDeclaredFeatures,
+    conditionNote: d.conditionNote,
+    sizeLabel: formData.has("sizeLabel") ? (d.sizeLabel ?? "") : undefined,
     // 「早めに販売したい」の欄があるフォームから送られたときだけ変更する（ほかの編集で勝手に外さない）
-    earlySale: formData.has("earlySaleSection") ? parsed.data.earlySale : undefined,
-    saleTargetAt: parsed.data.saleTargetAt,
+    earlySale: formData.has("earlySaleSection") ? d.earlySale : undefined,
+    saleTargetAt: d.saleTargetAt,
   });
   if (!r.ok) return { error: r.error };
   refresh();
-  return {};
+  // 保存後に、何が変わったかを示す
+  const changes: string[] = [];
+  if (before.unitPriceYenPerKg !== d.unitPriceYenPerKg) changes.push(`単価 ${before.unitPriceYenPerKg}円/kg → ${d.unitPriceYenPerKg}円/kg`);
+  if (before.totalGrams !== d.totalKg) changes.push(`出品総量 ${before.totalGrams / 1000}kg → ${d.totalKg / 1000}kg`);
+  if ((before.description ?? "") !== (d.description ?? "")) changes.push("説明");
+  if ((before.selfDeclaredFeatures ?? "") !== (d.selfDeclaredFeatures ?? "")) changes.push("特徴");
+  if ((before.conditionNote ?? "") !== (d.conditionNote ?? "")) changes.push("状態");
+  if (formData.has("sizeLabel") && (before.sizeLabel ?? "") !== (d.sizeLabel ?? "")) changes.push("大きさ");
+  return {
+    message: changes.length ? `保存しました（変更：${changes.join("、")}）。新しい申し込みから使われます。` : "変更はありませんでした。",
+  };
+}
+
+// 送料表の保存（受け渡し方法ごと）。行は「地域・下限kg・上限kg・送料」
+export async function saveShippingRatesAction(listingId: string, deliveryOptionId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser("FARMER");
+  if (!(await allowAction(user.id, "listing-write", 20, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
+  let rows: { prefecture: string; minKg: string; maxKg: string; feeYen: string }[];
+  try {
+    rows = JSON.parse(String(formData.get("rates") ?? "[]"));
+  } catch {
+    return { ok: false, error: "送料表を読み取れませんでした" };
+  }
+  const rates = [];
+  for (const [i, r] of rows.entries()) {
+    const min = kgTextToGrams(String(r.minKg ?? ""));
+    const max = kgTextToGrams(String(r.maxKg ?? ""));
+    const fee = String(r.feeYen ?? "").trim();
+    if (min === null || max === null) return { ok: false, error: `${i + 1}行目：重量（kg）を数字で入力してください` };
+    if (!/^\d+$/.test(fee) || Number(fee) > 100_000) return { ok: false, error: `${i + 1}行目：送料を0〜100,000円の整数で入力してください（無料は0円）` };
+    rates.push({ prefecture: String(r.prefecture ?? ""), minGramsExclusive: min, maxGramsInclusive: max, feeYen: Number(fee) });
+  }
+  const r = await updateShippingRates(prisma, { farmerUserId: user.id, listingId, deliveryOptionId, rates });
+  refresh();
+  return r.ok ? { ok: true, message: `送料表を保存しました（${r.count}行）。新しい申し込みから使われます。` } : r;
 }
 
 export async function closeListingAction(listingId: string): Promise<ActionResult> {
@@ -132,4 +171,26 @@ export async function reviewSalesTermsAction(listingId: string, _prev: ActionRes
   });
   refresh();
   return r.ok ? { ok: true, message: "販売条件を更新しました。新しい申し込みから使われます" } : r;
+}
+
+// お試し販売の設定の保存
+export async function saveTrialSettingsAction(listingId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser("FARMER");
+  const enabled = formData.get("trialEnabled") === "on";
+  const setGrams = kgTextToGrams(String(formData.get("trialSetKg") ?? ""));
+  const priceText = String(formData.get("trialPriceYen") ?? "").trim();
+  const countText = String(formData.get("trialCount") ?? "").trim();
+  if (enabled && setGrams === null) return { ok: false, error: "1セットの数量をkgの数字で入力してください" };
+  if (enabled && !/^\d+$/.test(priceText)) return { ok: false, error: "1セットの価格を円の整数で入力してください" };
+  if (enabled && !/^\d+$/.test(countText)) return { ok: false, error: "用意するセット数を整数で入力してください" };
+  const r = await updateTrialSettings(prisma, {
+    farmerUserId: user.id,
+    listingId,
+    enabled,
+    setGrams: setGrams ?? undefined,
+    priceYen: priceText ? Number(priceText) : undefined,
+    count: countText ? Number(countText) : undefined,
+  });
+  refresh();
+  return r.ok ? { ok: true, message: enabled ? "お試し販売の設定を保存しました" : "お試し販売を受け付けない設定にしました" } : r;
 }

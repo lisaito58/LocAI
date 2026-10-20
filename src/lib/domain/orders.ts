@@ -99,6 +99,7 @@ export type CreateOrderInput = {
   idempotencyKey: string;
   expectedTotalYen?: number; // 画面に表示した合計。変わっていたら申し込まずに知らせる（金額としては使わない）
   inquiryId?: string;
+  isTrial?: boolean; // お試しセットの申込（数量・価格は出品のお試し設定で固定）
 };
 
 export type Quote = {
@@ -134,8 +135,14 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Resu
   // 期限切れの反映は、申込が失敗しても確定させておく
   await expireDueOrders(db, { listingIds: [input.listingId] });
 
+  const farmerIdForLock = input.isTrial
+    ? (await db.listing.findUnique({ where: { id: input.listingId }, select: { farmerId: true } }))?.farmerId
+    : undefined;
+
   try {
     return await runTx(db, async (tx) => {
+      // お試しは農家ごとの上限があるので、同じ農家への同時申込を順番に処理する（農家→出品の順でロック）
+      if (farmerIdForLock) await tx.$queryRaw`SELECT id FROM "FarmerProfile" WHERE id = ${farmerIdForLock} FOR UPDATE`;
       await lockListing(tx, input.listingId);
       const now = await dbNow(tx);
       await expireDueOrdersInListing(tx, input.listingId, now);
@@ -149,7 +156,7 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Resu
         }
       }
 
-      const quote = await quoteInTx(tx, { ...input, prefecture: restaurant.prefecture }, now);
+      const quote = await quoteInTx(tx, { ...input, prefecture: restaurant.prefecture, restaurantId: restaurant.id }, now);
       if (input.expectedTotalYen !== undefined && input.expectedTotalYen !== quote.totalYen) {
         fail(`出品の条件が変わり、合計が${formatYen(quote.totalYen)}になりました。内容を確認してからもう一度送ってください`);
       }
@@ -183,6 +190,8 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Resu
           budgetYen: input.budgetYen,
           scheduleSlotId: slot.id,
           hasConsultation: Boolean(message),
+          isTrial: Boolean(input.isTrial),
+          snapTrialSetPriceYen: input.isTrial ? listing.trialSetPriceYen : null,
           snapItemName: listing.itemName,
           snapUnitPriceYenPerKg: listing.unitPriceYenPerKg,
           snapMinOrderGrams: listing.minOrderGrams,
@@ -232,17 +241,24 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Resu
 // 申込前の見積もりと全条件の検証。申込時も同じ関数で再検証する
 export async function quoteInTx(
   tx: Tx,
-  input: Omit<CreateOrderInput, "restaurantUserId" | "idempotencyKey" | "message"> & { prefecture: string },
+  input: Omit<CreateOrderInput, "restaurantUserId" | "idempotencyKey" | "message"> & { prefecture: string; restaurantId?: string },
   now: Date,
 ): Promise<Quote> {
   const listing = await tx.listing.findUnique({ where: { id: input.listingId } });
   if (!listing || listing.status !== "PUBLISHED") fail("この出品は現在受け付けていません");
   if (now >= listing.acceptDeadlineAt) fail("受付期限を過ぎました。別の出品を検索してください");
 
-  const q = input.quantityGrams;
-  if (q < LIMITS.minQuantityGrams || q > LIMITS.maxQuantityGrams) fail("数量は0.5〜1,000kgで指定してください");
-  if (!isAllowedQuantity(q, listing.minOrderGrams, listing.orderStepGrams)) {
-    fail("数量が最低量・注文単位に合っていません");
+  // お試しセット：数量はお試し設定の1セット分（通常の最低量・注文単位とは別枠。在庫は共通）
+  const q = input.isTrial ? (listing.trialSetGrams ?? 0) : input.quantityGrams;
+  if (input.isTrial) {
+    if (!listing.trialEnabled || !listing.trialSetGrams || !listing.trialSetPriceYen || listing.trialSetCount === null) {
+      fail("この出品はお試しセットを受け付けていません");
+    }
+  } else {
+    if (q < LIMITS.minQuantityGrams || q > LIMITS.maxQuantityGrams) fail("数量は0.5〜1,000kgで指定してください");
+    if (!isAllowedQuantity(q, listing.minOrderGrams, listing.orderStepGrams)) {
+      fail("数量が最低量・注文単位に合っていません");
+    }
   }
   const available = listing.totalGrams - listing.soldGrams - listing.heldGrams;
   if (q > available) fail(`残りが足りません。申込可能数量は${(available / 1000).toLocaleString("ja-JP")}kgです`);
@@ -263,7 +279,8 @@ export async function quoteInTx(
   const fee = findShippingFee(option.shippingRates, input.prefecture, q);
   if (fee === null) fail("この地域・数量の送料が未設定です。出品の相談欄から農家さんに相談してください");
 
-  const subtotal = itemSubtotalYen(listing.unitPriceYenPerKg, q);
+  if (input.isTrial) await checkTrialInTx(tx, listing, input.restaurantId ?? null, slot.startsAt);
+  const subtotal = input.isTrial ? listing.trialSetPriceYen! : itemSubtotalYen(listing.unitPriceYenPerKg, q);
   const total = subtotal + fee;
   if (total > LIMITS.maxYen) fail("注文合計が100,000円を超えます。数量を減らしてください");
   if (total > input.budgetYen) fail(`合計${formatYen(total)}が予算${formatYen(input.budgetYen)}を超えています`);
@@ -276,6 +293,48 @@ export async function quoteInTx(
   const deadlineAt = minDate(graceEnd, input.purchaseConfirmByAt, listing.responseDeadlineAt);
 
   return { quantityGrams: q, itemSubtotalYen: subtotal, shippingFeeYen: fee, totalYen: total, deadlineAt };
+}
+
+const ACTIVE: OrderStatus[] = ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT", "CONFIRMED"];
+
+// お試しセットの申込条件（農家の行ロックを取った状態で呼ぶと、同時申込でも上限を守れる）
+//  - 野菜ごとの残りセット数（回答待ち・確定の件数で数える。見送り・取消・期限切れは戻る）
+//  - 同じ店は同じ農家につき1回（申込中・販売確定がある間は不可。農家の見送りや期限切れなど未成立なら再度申込可）
+//  - 農家全体の1日の上限（申込日ではなく、受け渡し日ごとに数える）
+async function checkTrialInTx(
+  tx: Tx,
+  listing: { id: string; farmerId: string; trialSetCount: number | null },
+  restaurantId: string | null,
+  slotStartsAt: Date,
+) {
+  const used = await tx.order.count({ where: { listingId: listing.id, isTrial: true, status: { in: ACTIVE } } });
+  if (used >= (listing.trialSetCount ?? 0)) fail("お試しセットは残りがありません");
+  if (restaurantId) {
+    const mine = await tx.order.findFirst({
+      where: { restaurantId, farmerId: listing.farmerId, isTrial: true, status: { in: ACTIVE } },
+      select: { status: true },
+    });
+    if (mine) {
+      fail(
+        mine.status === "CONFIRMED"
+          ? "この農家さんのお試しセットは利用済みです（お試しは同じ農家さんにつき1回）。通常の注文はいつでもできます"
+          : "この農家さんのお試しセットを申込中です。回答を待つか、取り消してから申し込んでください",
+      );
+    }
+  }
+  const farmer = await tx.farmerProfile.findUniqueOrThrow({ where: { id: listing.farmerId }, select: { trialDailyLimit: true } });
+  if (farmer.trialDailyLimit !== null) {
+    const day = new Date(Math.floor((slotStartsAt.getTime() + 9 * 3_600_000) / 86_400_000) * 86_400_000 - 9 * 3_600_000);
+    const sameDay = await tx.order.count({
+      where: {
+        farmerId: listing.farmerId,
+        isTrial: true,
+        status: { in: ACTIVE },
+        snapScheduleStartsAt: { gte: day, lt: new Date(day.getTime() + 86_400_000) },
+      },
+    });
+    if (sameDay >= farmer.trialDailyLimit) fail("この受け渡し日は、農家さんのお試しの受付件数がいっぱいです。別の日程を選んでください");
+  }
 }
 
 // 画面表示用の見積もり（DBは変更しない）
@@ -315,6 +374,11 @@ function currentStateError(status: OrderStatus): string {
   return `この注文は現在「${ORDER_STATUS_LABELS[status]}」です。画面を更新して確認してください`;
 }
 
+// 住所を1行にする（都道府県＋市区町村＋町域＋番地など＋建物名）
+export function fullAddress(a: { prefecture: string; city: string; town?: string | null; addressLine: string; building?: string | null }) {
+  return `${a.prefecture}${a.city}${a.town ?? ""}${a.addressLine}${a.building ? ` ${a.building}` : ""}`;
+}
+
 async function confirmSale(tx: Tx, orderId: string, listingId: string, heldGrams: number) {
   await tx.listing.update({
     where: { id: listingId },
@@ -326,16 +390,16 @@ async function confirmSale(tx: Tx, orderId: string, listingId: string, heldGrams
   const o = await tx.order.findUniqueOrThrow({
     where: { id: orderId },
     select: {
-      restaurant: { select: { prefecture: true, city: true, addressLine: true, contactPhone: true } },
-      farmer: { select: { prefecture: true, city: true, addressLine: true, contactPhone: true } },
+      restaurant: { select: { prefecture: true, city: true, town: true, addressLine: true, building: true, contactPhone: true } },
+      farmer: { select: { prefecture: true, city: true, town: true, addressLine: true, building: true, contactPhone: true } },
     },
   });
   await tx.order.update({
     where: { id: orderId },
     data: {
-      snapRestaurantAddress: `${o.restaurant.prefecture}${o.restaurant.city}${o.restaurant.addressLine}`,
+      snapRestaurantAddress: fullAddress(o.restaurant),
       snapRestaurantPhone: o.restaurant.contactPhone,
-      snapFarmerAddress: `${o.farmer.prefecture}${o.farmer.city}${o.farmer.addressLine}`,
+      snapFarmerAddress: fullAddress(o.farmer),
       snapFarmerPhone: o.farmer.contactPhone,
     },
   });
@@ -397,6 +461,7 @@ export async function proposeChange(db: Db, input: ProposeChangeInput): Promise<
     if (order.farmer.userId !== input.farmerUserId) fail("注文が見つかりません");
     if (order.status !== "AWAITING_RESPONSE") return softFail(currentStateError(order.status));
     if (now >= order.deadlineAt) fail("注文期限を過ぎています");
+    if (order.isTrial) fail("お試しセットは数量・価格が決まっているため、条件変更はできません。承認するか見送ってください（日程の調整は相談欄で）");
     if (order.changeProposal) fail("条件変更は1回だけです。再変更する場合は見送って、新しい申込を待ってください");
 
     const q = input.newQuantityGrams;
