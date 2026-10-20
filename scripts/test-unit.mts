@@ -124,3 +124,35 @@ test("市区町村：都道府県との組み合わせを検証", () => {
   assert.ok(!isValidCity("京都府", "大阪市福島区")); // 別の都道府県
   assert.ok(!isValidCity("存在しない県", "南丹市"));
 });
+
+import { itemKey, wasteFromRatio } from "../src/lib/domain/loss";
+import { checkPostal } from "../src/lib/validation/postal";
+
+test("郵便番号：全角・ハイフン・〒を整えてから7桁を確認", () => {
+  assert.deepEqual(checkPostal("553-0003"), { ok: true, digits: "5530003", display: "553-0003" });
+  assert.deepEqual(checkPostal("〒５５３－０００３"), { ok: true, digits: "5530003", display: "553-0003" });
+  assert.deepEqual(checkPostal(" 5530003 "), { ok: true, digits: "5530003", display: "553-0003" });
+  const msg = (s: string) => {
+    const r = checkPostal(s);
+    return r.ok ? "" : r.message;
+  };
+  assert.match(msg(""), /入力してください/);
+  assert.match(msg("553-000"), /桁数/);
+  assert.match(msg("553-00a3"), /数字7桁/);
+});
+
+test("ロス記録：割合ボタンから廃棄量（g整数）を計算", () => {
+  assert.equal(wasteFromRatio(2000, 2), 1000); // 受取量2kgの約半分
+  assert.equal(wasteFromRatio(2000, 1), 500);
+  assert.equal(wasteFromRatio(1500, 3), 1125);
+  assert.equal(wasteFromRatio(1001, 2), 501); // 0.5gは四捨五入
+  assert.equal(wasteFromRatio(2000, 0), 0);
+  assert.equal(wasteFromRatio(2000, 4), 2000);
+});
+
+test("同じ食材の判定は、表記の揺れをそろえた完全一致だけ", () => {
+  assert.equal(itemKey("賀茂茄子"), itemKey("賀茂茄子 "));
+  assert.equal(itemKey("ﾄﾏﾄ"), itemKey("トマト")); // 半角カナ→全角
+  assert.notEqual(itemKey("賀茂茄子"), itemKey("賀茂なす")); // 似ていても別の食材
+  assert.notEqual(itemKey("トマト"), itemKey("ミニトマト"));
+});

@@ -143,7 +143,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
             ⏰ {formatJst(order.deadlineAt)} までに販売確定しなければ仮押さえ解除（期限は延長されません）
           </p>
         )}
-        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+        <div className="grid gap-2 text-sm min-[400px]:grid-cols-2 sm:grid-cols-4">
           <Info label="単価（申込時）" value={`${formatYen(order.snapUnitPriceYenPerKg)}/kg`} />
           <Info label="商品代" value={formatYen(order.itemSubtotalYen)} />
           <Info label="送料" value={order.shippingFeeYen === 0 ? "0円" : formatYen(order.shippingFeeYen)} />
@@ -160,7 +160,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
       {p && (
         <section className={`card flex flex-col gap-3 ${pendingProposal ? "border-2 border-orange-300" : ""}`}>
           <h2 className="section-title">📝 農家さんからの条件変更{p.respondedAt ? "（再同意済み）" : ""}</h2>
-          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+          <div className="grid gap-2 text-sm min-[400px]:grid-cols-2 sm:grid-cols-4">
             <Info label="数量" value={pendingProposal ? `${formatKg(order.quantityGrams)} → ${formatKg(p.newQuantityGrams)}` : formatKg(p.newQuantityGrams)} />
             <Info label="受け渡し" value={proposalSlot ? formatJst(proposalSlot.startsAt) : "-"} />
             <Info label="送料" value={formatYen(p.newShippingFeeYen)} />
@@ -384,7 +384,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
                         前回の費用：配送実費 {lastMemo.actualShippingYen ?? "未入力"}・梱包費 {lastMemo.packingYen ?? "未入力"}・その他 {lastMemo.otherSalesCostYen ?? "未入力"}（円）。下の欄に入れてあります。今回の値か確認してから保存してください。
                       </p>
                     )}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid items-start gap-2 sm:grid-cols-3">
                       <CostInput name="actualShippingYen" label="配送実費" value={memo?.actualShippingYen ?? lastMemo?.actualShippingYen} />
                       <CostInput name="packingYen" label="梱包費" value={memo?.packingYen ?? lastMemo?.packingYen} />
                       <CostInput name="otherSalesCostYen" label="その他" value={memo?.otherSalesCostYen ?? lastMemo?.otherSalesCostYen} />
@@ -397,6 +397,17 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
             </section>
           )}
         </>
+      )}
+
+      {/* 仕入れの振り返り（店本人だけ・任意） */}
+      {confirmed && !isFarmer && order.fulfillment?.buyerReceivedAt && (
+        <section className="card-soft flex flex-col gap-2">
+          <h2 className="section-title">📝 仕入れの振り返り（任意・あなただけに表示）</h2>
+          <p className="text-sm">使い切れたかを記録すると、次に同じ食材を注文するときの参考になります。</p>
+          <Link href={`/shop/loss/${order.id}`} className="btn-secondary self-start">
+            この注文の振り返りを記録・訂正する
+          </Link>
+        </section>
       )}
 
       {/* 取引レビュー（受取済みの注文だけ。未着などの問題は相談欄・要相談から） */}

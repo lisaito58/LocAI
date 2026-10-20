@@ -54,7 +54,7 @@ async function Content() {
             <Link href="/farm/simulator" className="btn-secondary btn-sm">
               🧮 受取額の試算
             </Link>
-            <Link href="/guide" className="btn-secondary btn-sm">
+            <Link href="/help" className="btn-secondary btn-sm">
               📖 使い方
             </Link>
           </section>

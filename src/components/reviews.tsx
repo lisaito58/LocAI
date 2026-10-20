@@ -105,7 +105,7 @@ export function ReviewForm({ orderId }: { orderId: string }) {
               {(["GOOD", "CONCERN"] as const).map((k) => (
                 <label
                   key={k}
-                  className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border-2 border-green-200 bg-white px-4 font-bold has-checked:border-leaf has-checked:bg-leaf-light has-focus-visible:ring-4 has-focus-visible:ring-green-200"
+                  className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border-2 border-green-200 bg-white px-4 font-bold has-checked:border-leaf has-checked:bg-leaf-light has-focus-visible:ring-4 has-focus-visible:ring-green-200"
                 >
                   <input type="radio" name="rating" value={k} required className="size-5 accent-green-700" />
                   {RATING_STYLE[k].emoji} {REVIEW_RATING_LABELS[k]}
@@ -120,7 +120,7 @@ export function ReviewForm({ orderId }: { orderId: string }) {
             </legend>
             <div className="flex flex-wrap gap-2">
               {REVIEW_TAGS.map((t) => (
-                <label key={t} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border-2 border-green-200 bg-white px-4 has-checked:border-leaf has-checked:bg-leaf-light">
+                <label key={t} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border-2 border-green-200 bg-white px-4 has-checked:border-leaf has-checked:bg-leaf-light">
                   <input type="checkbox" name="tags" value={t} className="size-5 accent-green-700" />
                   {t}
                 </label>

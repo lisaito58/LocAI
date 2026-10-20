@@ -6,6 +6,7 @@ import { openInquiryAction } from "@/app/actions/orders";
 import { ActionButton } from "@/components/action-button";
 import { ReqMark } from "@/components/fields";
 import { ReviewList } from "@/components/reviews";
+import { getLossWarning } from "@/lib/domain/loss";
 import { getFarmerReviews } from "@/lib/domain/reviews";
 import { itemEmoji, Loading, Notice, Page } from "@/components/ui";
 import { expireDueOrders, quoteOrder } from "@/lib/domain/orders";
@@ -14,6 +15,7 @@ import {
   endOfJstDay,
   formatDateOnly,
   formatJst,
+  formatJstDate,
   formatKg,
   formatYen,
   gramsToKgText,
@@ -24,6 +26,7 @@ import { requireRestaurant } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { DELIVERY_METHOD_LABELS, PAYMENT_METHOD_LABELS, PAYMENT_TIMING_LABELS } from "@/lib/validation/listing";
 import { searchHref } from "@/lib/validation/search";
+import { LossNotice } from "./loss-notice";
 import { OrderForm } from "./order-form";
 
 export const metadata: Metadata = { title: "出品の詳細 | LocAI" };
@@ -107,12 +110,32 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
     });
   }
 
+  // 前回のロス記録による注文前の案内（記録がなければ出さない）
+  const lossWarning = quote?.ok ? await getLossWarning(prisma, profile.id, listing.itemName) : null;
+
   const myOrders = await prisma.order.findMany({
     where: { restaurant: { userId: profile.userId }, listingId: { not: listing.id }, status: { in: ["AWAITING_RESPONSE", "AWAITING_REAGREEMENT", "CONFIRMED"] } },
     orderBy: { createdAt: "desc" },
     take: 20,
     select: { id: true, snapItemName: true, quantityGrams: true, useDate: true, farmer: { select: { farmName: true } } },
   });
+  // 申込フォーム（前回のロス記録による案内がある場合は、その後に表示する）
+  const orderForm = quote?.ok ? (
+    <OrderForm
+      deadlineText={formatJst(quote.quote.deadlineAt)}
+      hidden={{
+        listingId: listing.id,
+        deliveryOptionId: optionId,
+        scheduleSlotId: slotId,
+        quantityKg: purchaseKg,
+        budgetYen: budget,
+        useDate: use,
+        purchaseConfirmByAt: by,
+        expectedTotalYen: String(quote.quote.totalYen),
+        ...(q.inquiry && { inquiryId: q.inquiry }),
+      }}
+    />
+  ) : null;
   const backHref = q.seed ? searchHref(q, { purchase: null, purchaseKg: null, choice: null, inquiry: null }) : "/shop/search";
 
   return (
@@ -143,7 +166,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             👩‍🌾 <strong>{listing.farmer.farmName}</strong>（📍{listing.farmer.prefecture}
             {listing.farmer.city}）
           </p>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="grid gap-2 text-sm min-[400px]:grid-cols-2">
             <Info label="単価" value={`${formatYen(listing.unitPriceYenPerKg)}/kg`} />
             <Info label="申込可能" value={formatKg(Math.max(0, available))} />
             <Info label="販売単位" value={`最低${formatKg(listing.minOrderGrams)}・${formatKg(listing.orderStepGrams)}刻み`} />
@@ -258,7 +281,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             {quote?.ok && (
               <div className="flex flex-col gap-3">
                 <div className="rounded-3xl border-2 border-leaf bg-leaf-light/40 p-4">
-                  <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                  <div className="grid gap-2 text-sm min-[400px]:grid-cols-2 sm:grid-cols-4">
                     <Info label="数量" value={formatKg(quote.quote.quantityGrams)} />
                     <Info label="商品代" value={formatYen(quote.quote.itemSubtotalYen)} />
                     <Info label="送料" value={quote.quote.shippingFeeYen === 0 ? "0円" : formatYen(quote.quote.shippingFeeYen)} />
@@ -269,20 +292,19 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
                   </p>
                   <p className="hint mt-1">商品代は「単価×数量」を1円未満切り捨て。税や別料金は加えていません。</p>
                 </div>
-                <OrderForm
-                  deadlineText={formatJst(quote.quote.deadlineAt)}
-                  hidden={{
-                    listingId: listing.id,
-                    deliveryOptionId: optionId,
-                    scheduleSlotId: slotId,
-                    quantityKg: purchaseKg,
-                    budgetYen: budget,
-                    useDate: use,
-                    purchaseConfirmByAt: by,
-                    expectedTotalYen: String(quote.quote.totalYen),
-                    ...(q.inquiry && { inquiryId: q.inquiry }),
-                  }}
-                />
+                {lossWarning ? (
+                  <LossNotice
+                    receivedOn={formatJstDate(lossWarning.receivedAt)}
+                    daysAgo={Math.max(0, Math.floor((now.getTime() - lossWarning.receivedAt.getTime()) / 86_400_000))}
+                    receivedText={formatKg(lossWarning.receivedGrams)}
+                    wasteText={formatKg(lossWarning.wasteGrams)}
+                    approximate={lossWarning.approximate}
+                  >
+                    {orderForm}
+                  </LossNotice>
+                ) : (
+                  orderForm
+                )}
               </div>
             )}
           </>

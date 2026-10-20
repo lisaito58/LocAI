@@ -649,7 +649,7 @@ function ItemPicker({ value, items, onChange, error }: { value: string; items: s
                   type="button"
                   aria-pressed={value === it}
                   onClick={() => onChange(it)}
-                  className={`min-h-10 rounded-full border-2 px-3 text-sm font-bold ${value === it ? "border-leaf bg-leaf text-white" : "border-green-200 bg-white text-leaf-dark"}`}
+                  className={`min-h-10 rounded-lg border-2 px-3 text-sm font-bold ${value === it ? "border-leaf bg-leaf text-white" : "border-green-200 bg-white text-leaf-dark"}`}
                 >
                   {value === it && "✓ "}
                   {it}

@@ -35,6 +35,8 @@ async function Content() {
             city: profile.city,
             addressLine: profile.addressLine,
             contactPhone: profile.contactPhone,
+            postalCode: profile.postalCode ?? "",
+            mapVisible: profile.mapVisible,
             mainItems: profile.mainItems ?? "",
             commitment: profile.commitment ?? "",
             introduction: profile.introduction ?? "",
@@ -52,7 +54,7 @@ async function Content() {
         <Link href="/farm/reviews" className="btn-secondary justify-start">
           ✍️ あなたへの取引レビュー
         </Link>
-        <Link href="/guide" className="btn-secondary justify-start">
+        <Link href="/help" className="btn-secondary justify-start">
           📖 使い方を見る
         </Link>
       </section>
