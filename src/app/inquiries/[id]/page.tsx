@@ -75,7 +75,7 @@ async function Content({ params }: Pick<PageProps<"/inquiries/[id]">, "params">)
         <ul className="flex flex-col gap-2">
           {inquiry.messages.map((m) => (
             <li key={m.id} className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.senderId === user.id ? "self-end bg-leaf text-white" : "self-start bg-leaf-light"}`}>
-              <div className="text-xs opacity-70">
+              <div className="text-xs font-bold">
                 {names.get(m.senderId)} ・ {formatJst(m.createdAt)}
               </div>
               <p className="whitespace-pre-wrap">{m.body}</p>

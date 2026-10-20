@@ -26,6 +26,16 @@
   --font-sans: var(--font-maru), "Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif;
 }
 
+/* 読みやすさ：小さい文字の下限を上げ、行間を広げる（標準表示でも補足文が読めるように） */
+@theme {
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.55;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.65;
+  --text-base: 1rem;
+  --text-base--line-height: 1.75;
+}
+
 /* 文字サイズ「大きめ」：rem で作っている文字・余白・ボタンがまとめて大きくなる */
 html[data-text="large"] {
   font-size: 118.75%;
@@ -48,6 +58,9 @@ body {
   background-repeat: repeat, no-repeat;
   color: var(--foreground);
   font-family: var(--font-sans);
+  /* 丸ゴシックの細さで読みにくくならないよう、本文を少し太くする */
+  font-weight: 500;
+  line-height: 1.75;
 }
 
 /* 共通の部品クラス（@apply で組み合わせられるよう @utility で定義） */
@@ -86,7 +99,7 @@ body {
 }
 
 @utility input {
-  @apply min-h-11 w-full min-w-0 rounded-2xl border-2 border-green-200 bg-white px-3.5 py-2.5 text-base text-gray-900 outline-none transition placeholder:text-gray-500 focus:border-leaf focus:ring-4 focus:ring-green-100 disabled:bg-gray-100 disabled:text-gray-600 aria-invalid:border-red-600;
+  @apply min-h-11 w-full min-w-0 rounded-2xl border-2 border-green-200 bg-white px-3.5 py-2.5 text-base text-gray-900 outline-none transition placeholder:text-gray-600 focus:border-leaf focus:ring-4 focus:ring-green-100 disabled:bg-gray-100 disabled:text-gray-600 aria-invalid:border-red-600;
 }
 
 @utility label {
@@ -94,7 +107,7 @@ body {
 }
 
 @utility hint {
-  @apply text-sm text-gray-700;
+  @apply text-sm font-medium text-gray-800;
 }
 
 @utility badge {
@@ -139,4 +152,9 @@ select.input {
 :focus-visible {
   outline: 3px solid var(--leaf);
   outline-offset: 2px;
+}
+
+/* メニューの「開く」と「閉じる」は同じ大きさ・形にそろえる */
+@utility menu-toggle {
+  @apply flex min-h-11 min-w-[7.5rem] shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-green-200 bg-white px-3 font-bold text-leaf-dark hover:bg-leaf-light;
 }
