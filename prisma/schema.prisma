@@ -103,16 +103,18 @@ model RestaurantProfile {
   shopName         String
   prefecture       String
   city             String
+  postalCode       String? // 郵便番号（住所入力の補助。番地・建物名は本人が入力）
   addressLine      String // 詳細住所（非公開）
   contactPhone     String // 連絡先（非公開）
   defaultBudgetYen Int?
   createdAt        DateTime @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime @updatedAt @db.Timestamptz(3)
 
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders    Order[]
-  inquiries ListingInquiry[]
-  reviews   Review[]
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders      Order[]
+  inquiries   ListingInquiry[]
+  reviews     Review[]
+  lossRecords LossRecord[]
 }
 
 model FarmerProfile {
@@ -121,6 +123,8 @@ model FarmerProfile {
   farmName                 String
   prefecture               String
   city                     String
+  postalCode               String? // 郵便番号（住所入力の補助）
+  mapVisible               Boolean  @default(true) // 地図に「市区町村のおおよその位置」で表示するか（詳細住所は出さない）
   addressLine              String // 詳細住所（非公開）
   contactPhone             String // 連絡先（非公開）
   introduction             String? // 公開する紹介文（AI下書きは本人確認後に保存）
@@ -373,6 +377,7 @@ model Order {
   costMemos       CostMemo[]
   backupInquiries ListingInquiry[]     @relation("PrimaryOrder")
   review          Review?
+  lossRecord      LossRecord?
   fromInquiry     ListingInquiry?      @relation("ConvertedOrder")
 
   @@unique([restaurantId, idempotencyKey])
@@ -621,4 +626,40 @@ model ReviewReport {
 
   @@unique([reviewId, reporterId])
   @@index([status, createdAt])
+}
+
+// ============================================================
+// 仕入れの振り返り・ロス記録（任意。飲食店本人だけが閲覧・変更する）
+// 注文・在庫・支払い・レビュー・農家の評価には影響させない。
+// 1注文につき1件（訂正は同じ記録を更新し、二重に数えない）。
+// ============================================================
+
+enum LossStatus {
+  IN_USE // まだ使用中（振り返り未完了。ロス0として数えない）
+  DONE // 使い終えて廃棄量が確定
+}
+
+enum LossMethod {
+  RATIO // 割合ボタン（概算）
+  DIRECT // 数量を直接入力
+}
+
+model LossRecord {
+  id            String      @id @default(cuid())
+  orderId       String      @unique
+  restaurantId  String
+  status        LossStatus
+  method        LossMethod?
+  ratioQuarters Int? // 割合ボタンのとき 0〜4（0=ロスなし、1=約4分の1 … 4=全部）
+  receivedGrams Int // 受取量（初期値は販売確定数量。実際と違えば本人が訂正。元の注文は書き換えない）
+  wasteGrams    Int? // 廃棄量（DONE のときだけ。受取量を超えない）
+  approximate   Boolean     @default(false) // 割合ボタンによる概算か
+  reason        String?     @db.VarChar(200)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(3)
+
+  order      Order             @relation(fields: [orderId], references: [id])
+  restaurant RestaurantProfile @relation(fields: [restaurantId], references: [id])
+
+  @@index([restaurantId])
 }
