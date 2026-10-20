@@ -48,6 +48,28 @@ html[data-text="large"] {
   }
 }
 
+/* AI相談ボタン：下部メニュー・固定の操作ボタンと重ならない位置に置き、ページの最後が隠れないよう余白を足す */
+.ai-fab {
+  bottom: 1.5rem;
+}
+body:has(#ai-fab) {
+  padding-bottom: 5.5rem;
+}
+body:has([data-sticky-actions]) .ai-fab {
+  bottom: 6rem;
+}
+@media (max-width: 767px) {
+  body:has(#bottom-nav) .ai-fab {
+    bottom: calc(5.25rem + env(safe-area-inset-bottom));
+  }
+  body:has(#bottom-nav):has(#ai-fab) {
+    padding-bottom: calc(9.5rem + env(safe-area-inset-bottom));
+  }
+  body:has(#bottom-nav):has([data-sticky-actions]) .ai-fab {
+    bottom: calc(10.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 body {
   background-color: var(--background);
   /* うっすら葉っぱの水玉模様 */

@@ -13,7 +13,7 @@ export function LogoutButton({ variant = "page" }: { variant?: "page" | "menu" }
           .filter(Boolean);
         const lines = ["ログアウトしますか？"];
         if (dirty.length) lines.push(`\n保存していない「${dirty.join("」「")}」の変更は失われます。`);
-        lines.push("\nこのブラウザに保存した入力途中の下書き（出品・検索条件）も消去されます。");
+        lines.push("\nこのブラウザに保存した入力途中の下書き（出品・検索条件）とAI相談の会話も消去されます。");
         if (!window.confirm(lines.join(""))) {
           e.preventDefault();
           return;

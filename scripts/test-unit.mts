@@ -170,3 +170,29 @@ test("食材名の表記ゆれ：ひらがな・カタカナ・漢字の読み�
   assert.ok(!itemMatches("トマト", "なす"), "別の野菜は一致しない");
   assert.ok(!itemMatches("きゅうり", ""), "空の検索語は一致させない");
 });
+
+test("AI相談：数量の目安はアプリが計算し、0.1kg単位に切り上げる／範囲外は計算しない", async () => {
+  const { estimateQuantity } = await import("../src/lib/domain/ai-chat-calc");
+  assert.deepEqual(estimateQuantity(30, 80), { rawGrams: 2400, grams: 2400 });
+  assert.deepEqual(estimateQuantity(7, 45), { rawGrams: 315, grams: 400 });
+  assert.equal(estimateQuantity(0, 80), null, "人数が分からなければ計算しない");
+  assert.equal(estimateQuantity(30, 0), null);
+  assert.equal(estimateQuantity(2.5, 80), null);
+  assert.equal(estimateQuantity(1001, 80), null);
+});
+
+test("AI相談：掲載価格の参考は3件以上で、最低・中央値・最高を出す", async () => {
+  const { priceReference } = await import("../src/lib/domain/ai-chat-calc");
+  assert.deepEqual(priceReference([500, 300]), { enough: false, count: 2 });
+  assert.deepEqual(priceReference([500, 300, 400]), { enough: true, count: 3, minYen: 300, medianYen: 400, maxYen: 500 });
+  assert.deepEqual(priceReference([600, 300, 401, 500]), { enough: true, count: 4, minYen: 300, medianYen: 450, maxYen: 600 }, "偶数件は中央2件の平均（円未満切り捨て）");
+});
+
+test("AI相談：AIへ送る前に連絡先らしい文字列を伏せる（数量などの数字は残す）", async () => {
+  const { redactPersonal } = await import("../src/lib/domain/ai-chat-calc");
+  assert.equal(redactPersonal("電話は090-1234-5678です"), "電話は［電話番号］です");
+  assert.equal(redactPersonal("06-6123-4567"), "［電話番号］");
+  assert.equal(redactPersonal("〒530-0001に届けて"), "［郵便番号］に届けて");
+  assert.equal(redactPersonal("mail: a.b@example.com"), "mail: ［メールアドレス］");
+  assert.equal(redactPersonal("カレー30人分、玉ねぎ2.4kg、予算10000円"), "カレー30人分、玉ねぎ2.4kg、予算10000円");
+});

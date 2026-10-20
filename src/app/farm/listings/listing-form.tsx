@@ -590,7 +590,7 @@ export function ListingForm({ mode, sourceId, initial, farmPrefecture, currentAv
       <FormMessage message={clientError ?? state?.error} />
 
       {/* 戻る／次へ／公開する */}
-      <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-3xl bg-white/95 p-2 shadow-[0_-4px_16px_-8px_rgb(0_0_0/0.25)] md:bottom-2">
+      <div data-sticky-actions className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 flex gap-2 rounded-3xl bg-white/95 p-2 shadow-[0_-4px_16px_-8px_rgb(0_0_0/0.25)] md:bottom-2">
         {step > 0 && (
           <button key="back" type="button" onClick={() => setStep(step - 1)} className="btn-secondary flex-1">
             ← 戻る
