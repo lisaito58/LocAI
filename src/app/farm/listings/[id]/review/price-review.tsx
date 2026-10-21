@@ -1,6 +1,7 @@
 "use client";
 // 販売条件の見直し：今の単価と新しい単価で概算受取額を比べてから、必要なら変更する
 // 費用の未入力は0円とみなさない。値下げは任意で、ここで「変更する」を押すまで何も変わらない。
+import { ReceiptEstimate } from "@/components/receipt-estimate";
 import { useState } from "react";
 import { reviewSalesTermsAction } from "@/app/actions/listings";
 import { ActionButton } from "@/components/action-button";
@@ -71,7 +72,6 @@ export function PriceReview({
             <Result title={newPrice ? `新しい単価（${formatYen(newPrice)}/kg）` : "新しい単価"} r={after} />
           </div>
         )}
-        {before && !before.complete && <p className="text-sm text-amber-900">費用未入力：{before.missing.join("・")}（0円とはみなしていないため、入力済みの範囲の参考値です）</p>}
         <p className="hint">栽培費・税金・労働時間などは含まない参考値です。売り切れることや利益を保証するものではありません。</p>
       </section>
 
@@ -137,8 +137,8 @@ function Result({ title, r }: { title: string; r: ReturnType<typeof estimateRece
     <div className="rounded-2xl border-2 border-green-200 bg-white p-3">
       <div className="text-sm font-bold">{title}</div>
       {r ? (
-        <div className="text-2xl font-bold text-leaf-dark">
-          {r.complete ? "" : <span className="text-sm">入力済みの範囲で </span>}約 {formatYen(r.amountYen)}
+        <div className="mt-1">
+          <ReceiptEstimate r={r} />
         </div>
       ) : (
         <div className="text-gray-700">単価を入力してください</div>

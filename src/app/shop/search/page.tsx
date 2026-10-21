@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { CalmNotice, Loading, Notice, Page, PageTitle } from "@/components/ui";
+import { CalmNotice, itemEmoji, Loading, Notice, Page, PageTitle } from "@/components/ui";
 import {
   explainAlternatives,
   explainCandidates,
@@ -186,14 +186,16 @@ async function Results({ userId, parsed }: { userId: string; parsed: ParsedSearc
             農家さんが「この日時までに販売を決めたい」と希望している出品です。早く届くという意味ではありません。受け渡し日は各出品の日程で確認してください。
             {unchecked.length > 0 && `（${unchecked.join("・")}は未確認です）`}
           </p>
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+          <ul className="mt-3 grid gap-2 sm:auto-rows-fr sm:grid-cols-2">
             {early.map((c) => (
               <li key={c.listingId}>
-                <Link href={detailHref(c)} className="flex flex-col rounded-2xl bg-white p-3 hover:ring-2 hover:ring-orange-300">
+                <Link href={detailHref(c)} className="flex h-full flex-col gap-0.5 rounded-2xl bg-white p-3 hover:ring-2 hover:ring-orange-300">
                   <span className="font-bold">
-                    {c.itemName}（{c.farmName}）
+                    {itemEmoji(c.itemName)} {c.itemName}
                   </span>
-                  <span className="text-sm">販売希望期限 {formatJst(c.saleTargetAt!)} ・ 受け渡し {formatJst(c.firstSlotAt)}〜</span>
+                  <span className="text-sm text-gray-800">{c.farmName}</span>
+                  <span className="mt-auto pt-1 text-sm">販売希望期限 {formatJst(c.saleTargetAt!)}</span>
+                  <span className="text-sm">受け渡し {formatJst(c.firstSlotAt)}〜</span>
                 </Link>
               </li>
             ))}

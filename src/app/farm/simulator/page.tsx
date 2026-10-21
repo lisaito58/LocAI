@@ -1,3 +1,4 @@
+import { ReceiptEstimate } from "@/components/receipt-estimate";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { saveSimulationAction } from "@/app/actions/costs";
@@ -85,10 +86,7 @@ async function Content() {
                   商品代 {formatYen(s.itemSubtotalYen ?? 0)}
                   {s.receivedShippingYen === null ? "・受け取る送料 未入力" : ` ＋ 送料 ${formatYen(s.receivedShippingYen)}`}
                 </div>
-                <div className="text-lg font-bold text-leaf-dark">
-                  概算受取額 {est.complete ? "" : "（入力済みの範囲）"}約 {formatYen(est.amountYen)}
-                </div>
-                {!est.complete && <div className="text-xs text-amber-800">費用未入力：{est.missing.join("・")}</div>}
+                <ReceiptEstimate r={est} size="sm" />
                 {s.marketAmountYen !== null &&
                   (comparable ? (
                     <div className="rounded-xl bg-white px-3 py-1.5">

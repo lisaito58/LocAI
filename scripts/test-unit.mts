@@ -196,3 +196,13 @@ test("AI相談：AIへ送る前に連絡先らしい文字列を伏せる（数�
   assert.equal(redactPersonal("mail: a.b@example.com"), "mail: ［メールアドレス］");
   assert.equal(redactPersonal("カレー30人分、玉ねぎ2.4kg、予算10000円"), "カレー30人分、玉ねぎ2.4kg、予算10000円");
 });
+
+test("地図の位置：郡名なし・区なしの政令市の登録でも、おおよその位置を出す", async () => {
+  const { cityPoint } = await import("../src/lib/data/municipality-points");
+  assert.ok(cityPoint("大阪府", "豊能郡能勢町"));
+  assert.deepEqual(cityPoint("大阪府", "能勢町"), cityPoint("大阪府", "豊能郡能勢町"), "郡名なしでも同じ位置");
+  assert.ok(cityPoint("京都府", "京都市"), "区なしの政令市は区の平均");
+  assert.ok(cityPoint("京都府", "南丹市"));
+  assert.equal(cityPoint("京都府", "ああああ"), null, "一覧にない名前は出さない");
+  assert.equal(cityPoint("京都府", "京都"), null);
+});

@@ -117,7 +117,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
           <p className="text-sm">
             ⏰ 受付期限 <strong>{formatJst(listing.acceptDeadlineAt)}</strong> ／ 回答の最終期限 <strong>{formatJst(listing.responseDeadlineAt)}</strong>
           </p>
-          <StockBar total={listing.totalGrams} sold={listing.soldGrams} held={listing.heldGrams} />
+          <StockBar total={listing.totalGrams} sold={listing.soldGrams} held={listing.heldGrams} closed={!accepting} />
           {listing.trialEnabled && listing.trialSetGrams && (
             <p className="text-sm font-bold text-leaf-dark">
               🧺 お試しセット：1セット{formatKg(listing.trialSetGrams)}・{formatYen(listing.trialSetPriceYen ?? 0)}（用意 {listing.trialSetCount}セット、申込中・確定 {trialUsed}セット）
@@ -138,10 +138,10 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
               </Link>
             )}
             <Link href={`/farm/listings/${listing.id}/edit`} className="btn-primary btn-sm">
-              ✏️ 出品を編集する
+              ✏️ 価格・送料などを編集
             </Link>
             <Link href={`/farm/listings/${listing.id}/review`} className="btn-secondary btn-sm">
-              🔎 販売条件を見直す（試算・早めに販売）
+              🧮 受取額を試算・値下げを検討
             </Link>
             <Link href={`/farm/listings/new?copy=${listing.id}`} className="btn-secondary btn-sm">
               📋 前回から複製して新しく出品
@@ -279,7 +279,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/farm/listings/
         <h2 className="section-title">✏️ 出品の内容を変える</h2>
         <p className="text-sm">基本情報（価格・総量・説明など）・送料表・お試し販売を変更できます。届いている購入希望や確定した注文の条件は変わりません。</p>
         <Link href={`/farm/listings/${listing.id}/edit`} className="btn-primary self-start">
-          ✏️ 出品を編集する
+          ✏️ 価格・送料などを編集
         </Link>
       </section>
     </div>

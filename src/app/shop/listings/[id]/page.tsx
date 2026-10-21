@@ -10,6 +10,7 @@ import { getLossWarning } from "@/lib/domain/loss";
 import { getFarmerReviews } from "@/lib/domain/reviews";
 import { itemEmoji, Loading, Notice, Page } from "@/components/ui";
 import { expireDueOrders, quoteOrder } from "@/lib/domain/orders";
+import { findShippingFee } from "@/lib/domain/shipping";
 import { dbNow } from "@/lib/domain/tx";
 import {
   endOfJstDay,
@@ -227,28 +228,22 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
               {listing.selfDeclaredFeatures}
             </p>
           )}
-        </div>
-      </section>
-
-      {(listing.farmer.introduction || listing.farmer.commitment) && (
-        <section className="card-soft text-sm">
-          <h2 className="section-title">🌾 {listing.farmer.farmName} について</h2>
-          {listing.farmer.mainItems && <p className="mt-1">主な品目：{listing.farmer.mainItems}</p>}
-          {listing.farmer.commitment && <p className="mt-1">こだわり（自己申告）：{listing.farmer.commitment}</p>}
-          {listing.farmer.introduction && <p className="mt-2 whitespace-pre-wrap">{listing.farmer.introduction}</p>}
-          <p className="mt-2 text-xs text-gray-700">
+          <p className="text-xs text-gray-700">
             回答の目安：{listing.farmer.responseGuide ?? "未設定"}
             {listing.farmer.availableWeekdays && ` ・ 対応曜日：${listing.farmer.availableWeekdays}`}（参考。回答を保証するものではありません）
           </p>
-        </section>
-      )}
-
-      <section className="card-soft flex flex-col gap-3">
-        <h2 className="section-title">✍️ {listing.farmer.farmName} の取引レビュー</h2>
-        <ReviewList summary={await getFarmerReviews(prisma, listing.farmerId, 5)} />
+          <div className="mt-auto grid gap-2 pt-1 min-[400px]:grid-cols-2">
+            <a href="#conditions" className="btn-primary btn-sm">
+              🧺 購入条件を確認する
+            </a>
+            <a href="#ask" className="btn-secondary btn-sm">
+              💬 農家さんに質問する
+            </a>
+          </div>
+        </div>
       </section>
 
-      <section className="card flex flex-col gap-3">
+      <section id="conditions" className="card flex scroll-mt-24 flex-col gap-3">
         <h2 className="section-title">🚚 受け渡し・支払いの条件</h2>
         {listing.deliveryOptions.map((o) => (
           <div key={o.id} className="rounded-2xl bg-leaf-light/40 p-3 text-sm">
@@ -291,8 +286,25 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
             {trialOffered && (
               <div className="rounded-2xl border-2 border-orange-200 bg-orange-50/70 p-3">
                 <p className="font-bold text-orange-950">
-                  🧺 お試しセット：1セット{formatKg(listing.trialSetGrams!)}・商品代{formatYen(listing.trialSetPriceYen!)}（送料は別。残り{trialRemaining}セット）
+                  🧺 お試しセット：1セット{formatKg(listing.trialSetGrams!)}・商品代{formatYen(listing.trialSetPriceYen!)}（残り{trialRemaining}セット）
                 </p>
+                <ul className="text-sm">
+                  {listing.deliveryOptions.map((o) => {
+                    const fee = findShippingFee(o.shippingRates, profile.prefecture, listing.trialSetGrams!);
+                    return (
+                      <li key={o.id}>
+                        {DELIVERY_METHOD_LABELS[o.method]}：
+                        {fee === null ? (
+                          `${profile.prefecture}への送料は未設定`
+                        ) : (
+                          <>
+                            送料{fee === 0 ? "0円" : formatYen(fee)}・<strong>合計 {formatYen(listing.trialSetPriceYen! + fee)}</strong>（{profile.prefecture}まで）
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
                 <p className="text-sm">
                   通常の注文の前に少量を試せます（農家さんの承認制・同じ農家さんにつき1回）。お試しを使わなくても、通常の注文はできます。
                   {myTrial && (myTrial.status === "CONFIRMED" ? " この農家さんのお試しは利用済みです。" : " この農家さんのお試しを申込中です。")}
@@ -458,6 +470,25 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
         >
           ✉️ 質問を送る
         </ActionButton>
+      </section>
+
+      {(listing.farmer.introduction || listing.farmer.commitment || listing.farmer.mainItems) && (
+        <details className="card-soft text-sm">
+          <summary className="cursor-pointer text-lg font-bold text-leaf-dark">🌾 {listing.farmer.farmName} について詳しく見る（紹介・こだわり）</summary>
+          {listing.farmer.mainItems && <p className="mt-2">主な品目：{listing.farmer.mainItems}</p>}
+          {listing.farmer.introduction && <p className="mt-2 whitespace-pre-wrap">{listing.farmer.introduction}</p>}
+          {listing.farmer.commitment && (
+            <p className="mt-2">
+              <span className="badge mr-1 bg-white text-leaf-dark">こだわり（自己申告）</span>
+              {listing.farmer.commitment}
+            </p>
+          )}
+        </details>
+      )}
+
+      <section className="card-soft flex flex-col gap-3">
+        <h2 className="section-title">✍️ {listing.farmer.farmName} の取引レビュー</h2>
+        <ReviewList summary={await getFarmerReviews(prisma, listing.farmerId, 5)} />
       </section>
     </div>
   );

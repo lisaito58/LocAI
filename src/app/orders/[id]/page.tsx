@@ -17,6 +17,7 @@ import {
   reportPaymentAction,
 } from "@/app/actions/orders";
 import { ActionButton } from "@/components/action-button";
+import { ReceiptEstimate } from "@/components/receipt-estimate";
 import { ReviewForm } from "@/components/reviews";
 import { itemEmoji, Loading, Notice, Page, StatusBadge } from "@/components/ui";
 import { estimateReceipt } from "@/lib/domain/estimate";
@@ -267,6 +268,42 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
               )}
               {order.payment.confirmedAt && <span>確認：{formatJst(order.payment.confirmedAt)}</span>}
             </div>
+            {order.payment.status === "AWAITING_PAYMENT" && order.snapPaymentDeadlineAt < now && (
+              <div role="alert" className="flex flex-col gap-2 rounded-2xl border-2 border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                <p className="font-bold">
+                  ⚠️ 支払期限（{formatJst(order.snapPaymentDeadlineAt)}）を過ぎています。
+                  {isFarmer ? "支払いの申告・入金の確認がまだです。必要ならお店に連絡してください。" : "農家さんに連絡してください。"}
+                </p>
+                <p>期限を過ぎても、注文が自動で取り消されることはありません。</p>
+                <a href="#messages" className="btn-secondary btn-sm self-start">
+                  💬 {isFarmer ? "お店に連絡する" : "農家さんに連絡する"}
+                </a>
+              </div>
+            )}
+            {!isFarmer && order.payment.status === "AWAITING_PAYMENT" && (
+              <div className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-950">
+                <p className="font-bold">
+                  支払いの手順（{PAYMENT_TIMING_LABELS[order.snapPaymentTiming]}・{PAYMENT_METHOD_LABELS[order.snapPaymentMethod]}・期限 {formatJst(order.snapPaymentDeadlineAt)}）
+                </p>
+                <ol className="mt-1 list-decimal pl-5">
+                  {order.snapPaymentMethod === "CASH" ? (
+                    <li>受け渡しのときに、現金で農家さんに支払います</li>
+                  ) : (
+                    <>
+                      <li>
+                        {order.snapPaymentMethod === "BANK_TRANSFER" ? "振込先" : "支払い先・方法"}を、
+                        <a href="#messages" className="link">
+                          下の相談欄
+                        </a>
+                        で農家さんに確認します
+                      </li>
+                      <li>アプリの外で支払います（アプリ内では支払いできません）</li>
+                    </>
+                  )}
+                  <li>支払ったら「支払ったことを申告する」を押します</li>
+                </ol>
+              </div>
+            )}
             <p className="hint">店の申告だけでは入金確認済みになりません。目安を過ぎても自動で確認済みにはなりません。</p>
             <div className="flex flex-wrap gap-2">
               {!isFarmer && order.payment.status !== "FARMER_CONFIRMED" && (
@@ -288,6 +325,11 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
               <Info label="農家：発送済み／引き渡し済み" value={order.fulfillment.farmerSentAt ? formatJst(order.fulfillment.farmerSentAt) : "未記録"} />
               <Info label="店：受取済み" value={order.fulfillment.buyerReceivedAt ? formatJst(order.fulfillment.buyerReceivedAt) : "未記録"} />
             </div>
+            {isFarmer && order.fulfillment.buyerReceivedAt && !order.fulfillment.farmerSentAt && (
+              <p role="status" className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
+                ⚠️ お店は受け取りを記録済みです（{formatJst(order.fulfillment.buyerReceivedAt)}）。発送・引き渡しの記録を確認してください。
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               {isFarmer && !order.fulfillment.farmerSentAt && (
                 <ActionButton
@@ -328,24 +370,32 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
               className="btn-secondary btn-sm self-start"
               confirmText="自分が付けた記録を取り消しますか？（履歴に残ります）"
               fields={
-                <div className="grid gap-2 text-sm sm:grid-cols-[14rem_1fr]">
-                  <select name="target" className="input" defaultValue="">
-                    <option value="" disabled>
-                      訂正する自分の記録
-                    </option>
-                    {isFarmer ? (
-                      <>
-                        <option value="paymentConfirm">入金確認を取り消す</option>
-                        <option value="sent">発送記録を取り消す</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="paymentReport">支払申告を取り消す</option>
-                        <option value="received">受取記録を取り消す</option>
-                      </>
-                    )}
-                  </select>
-                  <input name="reason" className="input" maxLength={200} placeholder="訂正の理由（必須）" />
+                <div className="grid items-start gap-2 text-sm sm:grid-cols-[16rem_1fr]">
+                  <label className="flex flex-col gap-1">
+                    <span className="label">訂正する記録</span>
+                    <select name="target" className="input" defaultValue="">
+                      <option value="" disabled>
+                        選んでください
+                      </option>
+                      {isFarmer ? (
+                        <>
+                          <option value="paymentConfirm">入金確認を取り消す</option>
+                          <option value="sent">発送記録を取り消す</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="paymentReport">支払申告を取り消す</option>
+                          <option value="received">受取記録を取り消す</option>
+                        </>
+                      )}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="label">
+                      訂正の理由<span className="req">必須</span>
+                    </span>
+                    <input name="reason" className="input" maxLength={200} placeholder="例：押し間違えたため" />
+                  </label>
                 </div>
               }
             >
@@ -366,13 +416,10 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
             <section className="card flex flex-col gap-3">
               <h2 className="section-title">🧮 概算受取額（あなただけに表示）</h2>
               <div className="rounded-2xl bg-leaf-light/50 p-3 text-sm">
-                <p>
+                <p className="mb-2">
                   商品代 {formatYen(order.itemSubtotalYen)} ＋ 受け取る送料 {formatYen(order.shippingFeeYen)} − 配送実費 − 梱包費 − その他
                 </p>
-                <p className="mt-1 text-xl font-bold text-leaf-dark">
-                  {estimate.complete ? "" : "入力済みの範囲で "}約 {formatYen(estimate.amountYen)}
-                </p>
-                {!estimate.complete && <p className="text-xs text-amber-800">費用未入力：{estimate.missing.join("・")}（0円とはみなしていません）</p>}
+                <ReceiptEstimate r={estimate} />
                 <p className="hint mt-1">栽培費・税金・労働時間などは含まない参考値で、最終的な利益ではありません。店の請求額には影響しません。</p>
               </div>
               <ActionButton
@@ -438,14 +485,14 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
           )}
           {!isFarmer && (
             <p className="rounded-2xl bg-white px-3 py-2 text-sm ring-1 ring-green-100">
-              届かない・内容が違うなどの問題はレビューの対象外です。下の相談欄で農家さんに連絡し、必要なら「要相談」の目印を付けてください。
+              未着など、まだ受け取りが完了していない問題は、下の相談欄から農家さんに連絡してください（必要なら「要相談」の目印を付けられます）。受け取り後は、掲載内容との違いもレビューに書けます。
             </p>
           )}
         </section>
       )}
 
       {/* 相談（注文スレッド） */}
-      <section className="card flex flex-col gap-3">
+      <section id="messages" className="card flex scroll-mt-24 flex-col gap-3">
         <h2 className="section-title">💬 この注文の相談（当事者だけが見られます）</h2>
         {order.messages.length === 0 ? (
           <p className="text-sm text-gray-700">まだメッセージはありません。</p>
@@ -483,7 +530,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/orders/[id]">,
       </details>
 
       <Link href={isFarmer ? `/farm/listings/${order.listingId}` : "/shop/orders"} className="link self-start text-sm">
-        ← {isFarmer ? "出品の管理に戻る" : "マイページに戻る"}
+        ← {isFarmer ? "出品の管理に戻る" : "注文一覧に戻る"}
       </Link>
     </div>
   );

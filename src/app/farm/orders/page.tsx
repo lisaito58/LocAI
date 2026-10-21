@@ -44,7 +44,11 @@ async function Content() {
   const { end: todayEnd } = jstDayRange(now);
   const confirmed = orders.filter((o) => o.status === "CONFIRMED");
   const paymentQueue = confirmed.filter((o) => o.payment?.status === "BUYER_REPORTED");
-  const toShip = confirmed.filter((o) => !o.fulfillment?.farmerSentAt);
+  const unsent = confirmed.filter((o) => !o.fulfillment?.farmerSentAt);
+  // お店が受け取りを記録したのに、発送・引き渡しが未記録（記録漏れの可能性）
+  const receivedUnsent = unsent.filter((o) => o.fulfillment?.buyerReceivedAt);
+  const toShip = unsent.filter((o) => !o.fulfillment?.buyerReceivedAt);
+  const payOverdue = confirmed.filter((o) => o.payment?.status === "AWAITING_PAYMENT" && o.snapPaymentDeadlineAt < now);
 
   return (
     <div className="flex flex-col gap-6">
@@ -103,6 +107,32 @@ async function Content() {
           })
         )}
       </section>
+
+      {payOverdue.length > 0 && (
+        <section id="payment-overdue" className="flex scroll-mt-24 flex-col gap-3">
+          <h2 className="section-title text-red-800">⚠️ 支払期限を過ぎて、支払いの申告がない注文</h2>
+          <p className="text-sm text-gray-800">自動で取り消されることはありません。必要なら注文の相談欄からお店に連絡してください。</p>
+          {payOverdue.map((o) => (
+            <Link key={o.id} href={`/orders/${o.id}#messages`} className="card-soft flex flex-wrap items-center gap-2 border-2 border-red-200 p-3 text-sm hover:bg-red-50">
+              🏮 {o.restaurant.shopName} ・ {o.snapItemName} {formatYen(o.totalYen)}
+              <span className="ml-auto font-bold text-red-800">支払期限 {formatJst(o.snapPaymentDeadlineAt)}</span>
+            </Link>
+          ))}
+        </section>
+      )}
+
+      {receivedUnsent.length > 0 && (
+        <section id="received-unsent" className="flex scroll-mt-24 flex-col gap-3">
+          <h2 className="section-title text-amber-900">⚠️ お店は受け取りを記録済み・発送の記録がない注文</h2>
+          <p className="text-sm text-gray-800">発送・引き渡しの記録を確認してください（お店の記録だけで、発送済みにはなりません）。</p>
+          {receivedUnsent.map((o) => (
+            <Link key={o.id} href={`/orders/${o.id}`} className="card-soft flex flex-wrap items-center gap-2 border-2 border-amber-300 p-3 text-sm hover:bg-amber-50">
+              🏮 {o.restaurant.shopName} ・ {o.snapItemName} {formatKg(o.quantityGrams)}
+              <span className="ml-auto font-bold text-amber-900">お店の受取記録 {formatJst(o.fulfillment!.buyerReceivedAt!)}</span>
+            </Link>
+          ))}
+        </section>
+      )}
 
       <section id="handover" className="flex scroll-mt-24 flex-col gap-3">
         <h2 className="section-title">🚚 発送・引き渡しの予定（未記録のもの）</h2>

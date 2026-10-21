@@ -201,14 +201,15 @@ async function EarlySale({ userId }: { userId: string }) {
       <p className="mt-1 text-sm text-gray-800">
         農家さんが「この日時までに販売を決めたい」と希望している出品です。早く届くという意味ではなく、承認も保証されません。数量・予算・使用日は未確認なので、詳細画面で確認してください。
       </p>
-      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+      <ul className="mt-3 grid gap-2 sm:auto-rows-fr sm:grid-cols-2">
         {picks.map((c) => (
           <li key={c.listingId}>
-            <Link href={`/shop/listings/${c.listingId}`} className="flex flex-col rounded-2xl bg-white p-3 hover:ring-2 hover:ring-orange-300">
+            <Link href={`/shop/listings/${c.listingId}`} className="flex h-full flex-col gap-0.5 rounded-2xl bg-white p-3 hover:ring-2 hover:ring-orange-300">
               <span className="font-bold">
-                {itemEmoji(c.itemName)} {c.itemName}（{c.farmName}）
+                {itemEmoji(c.itemName)} {c.itemName}
               </span>
-              <span className="text-sm">販売希望期限 {formatJst(c.saleTargetAt!)}</span>
+              <span className="text-sm text-gray-800">{c.farmName}</span>
+              <span className="mt-auto pt-1 text-sm">販売希望期限 {formatJst(c.saleTargetAt!)}</span>
               <span className="text-sm">受け渡し {formatJst(c.firstSlotAt)}〜（登録された日程）</span>
             </Link>
           </li>

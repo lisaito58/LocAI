@@ -109,6 +109,19 @@ export function AiChat({ role, userId }: { role: "RESTAURANT" | "FARMER"; userId
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // 開いている間は後ろのページをスクロールさせない（チャットだけが動く）
+  useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    const prev = { overflow: root.style.overflow, overscroll: root.style.overscrollBehavior };
+    root.style.overflow = "hidden";
+    root.style.overscrollBehavior = "none";
+    return () => {
+      root.style.overflow = prev.overflow;
+      root.style.overscrollBehavior = prev.overscroll;
+    };
+  }, [open]);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [msgs, pending, error, open]);
@@ -188,11 +201,17 @@ export function AiChat({ role, userId }: { role: "RESTAURANT" | "FARMER"; userId
             </button>
           </div>
 
-          <p className="border-b border-orange-100 bg-white px-3 py-2 text-sm text-gray-800">
-            🤖 回答はAIが作ります（人間のスタッフにはつながりません）。間違うことがあるので、注文・送料・期限は各画面で確認してください。AIは注文・価格や在庫の変更などはできません。
-          </p>
+          <div className="border-b border-orange-100 bg-white px-3 py-2 text-sm text-gray-800">
+            <p>🤖 AIの回答には誤りがあります。注文条件は商品画面で確認してください。</p>
+            <details>
+              <summary className="cursor-pointer font-bold underline">くわしく</summary>
+              <p className="mt-1">
+                回答はAIが作ります（人間のスタッフにはつながりません）。数量の合計や掲載中の出品はアプリが表示しています。AIは注文・価格や在庫の変更などはできません。
+              </p>
+            </details>
+          </div>
 
-          <div className="flex-1 overflow-y-auto px-3 py-3" aria-live="polite">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3" aria-live="polite">
             <div className="flex flex-col gap-3">
               <AiBubble text={GREETING[role]} />
               {msgs.map((m, i) =>
@@ -228,21 +247,25 @@ export function AiChat({ role, userId }: { role: "RESTAURANT" | "FARMER"; userId
           </div>
 
           <div className="flex flex-col gap-2 border-t-2 border-orange-100 bg-white px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:rounded-b-3xl">
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="よく使う質問">
-              {QUICK[role].map((q) => (
-                <button key={q.label} type="button" onClick={() => quick(q)} disabled={pending && !q.fill} className="shrink-0 rounded-full border-2 border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-bold text-orange-950 hover:bg-orange-100">
-                  {q.label}
-                </button>
-              ))}
-            </div>
+            {/* よく使う質問：最初は表示し、会話が始まったら開閉式にして会話の表示を広くする */}
+            <details key={msgs.length === 0 ? "new" : "talking"} open={msgs.length === 0}>
+              <summary className="cursor-pointer text-sm font-bold text-orange-950">💡 よく使う質問</summary>
+              <div className="mt-2 grid grid-cols-2 gap-2" aria-label="よく使う質問">
+                {QUICK[role].map((q) => (
+                  <button key={q.label} type="button" onClick={() => quick(q)} disabled={pending && !q.fill} className="rounded-2xl border-2 border-orange-200 bg-orange-50 px-2.5 py-1.5 text-left text-sm font-bold text-orange-950 hover:bg-orange-100">
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            </details>
             <form
-              className="flex items-end gap-2"
+              className="flex flex-col gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 submit();
               }}
             >
-              <label className="flex flex-1 flex-col gap-0.5">
+              <label className="flex flex-col gap-0.5">
                 <span className="sr-only">AIへの質問</span>
                 <textarea
                   ref={inputRef}
@@ -259,11 +282,14 @@ export function AiChat({ role, userId }: { role: "RESTAURANT" | "FARMER"; userId
                   placeholder="例：カレーを30人分作ります。玉ねぎはどれくらい必要？"
                   className="input min-h-12 resize-none"
                 />
-                <span className="text-sm text-gray-800">
-                  住所・電話番号などは入力しないでください（{text.length}/{MAX_CHARS}）
+                <span className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm text-gray-800">
+                  <span>住所・電話番号などは入力しないでください</span>
+                  <span>
+                    {text.length}/{MAX_CHARS}
+                  </span>
                 </span>
               </label>
-              <button type="submit" className="btn-primary mb-7 shrink-0" disabled={pending || !text.trim()}>
+              <button type="submit" className="btn-primary w-full" disabled={pending || !text.trim()}>
                 送る
               </button>
             </form>
