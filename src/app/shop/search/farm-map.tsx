@@ -38,6 +38,14 @@ export function FarmMap({ areas, prefectures }: { areas: MapArea[]; prefectures:
           center: KANSAI_CENTER,
           zoom: 7.6,
           cooperativeGestures: true, // スマホでページのスクロールを妨げない（2本指で地図を動かす）
+          locale: {
+            "CooperativeGesturesHandler.WindowsHelpText": "Ctrl キーを押しながらスクロールすると、地図を拡大・縮小できます",
+            "CooperativeGesturesHandler.MacHelpText": "⌘ キーを押しながらスクロールすると、地図を拡大・縮小できます",
+            "CooperativeGesturesHandler.MobileHelpText": "2本の指で地図を動かせます",
+            "NavigationControl.ZoomIn": "拡大",
+            "NavigationControl.ZoomOut": "縮小",
+            "NavigationControl.ResetBearing": "北を上にする",
+          },
           attributionControl: { compact: false, customAttribution: [] },
         });
         mapRef.current = map;

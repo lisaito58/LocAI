@@ -1,7 +1,8 @@
 // 「出品30kg／販売確定5kg／仮押さえ7kg／申込可能18kg」の見える化
 import { formatKg } from "@/lib/domain/units";
 
-export function StockBar({ total, sold, held }: { total: number; sold: number; held: number }) {
+// closed：受付終了・受付期限後。新しい申込はできないので「申込可能」ではなく「残量」と表示する
+export function StockBar({ total, sold, held, closed = false }: { total: number; sold: number; held: number; closed?: boolean }) {
   const available = total - sold - held;
   const pct = (g: number) => `${total ? (g / total) * 100 : 0}%`;
   return (
@@ -14,7 +15,11 @@ export function StockBar({ total, sold, held }: { total: number; sold: number; h
         <span>📦 出品 {formatKg(total)}</span>
         <span className="text-leaf-dark">✅ 販売確定 {formatKg(sold)}</span>
         <span className="text-amber-700">⏳ 仮押さえ {formatKg(held)}</span>
-        <span className="font-bold text-leaf">🧺 申込可能 {formatKg(available)}</span>
+        {closed ? (
+          <span className="font-bold text-gray-800">🧺 残量 {formatKg(available)}／現在は受付終了</span>
+        ) : (
+          <span className="font-bold text-leaf">🧺 申込可能 {formatKg(available)}</span>
+        )}
       </p>
     </div>
   );

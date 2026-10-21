@@ -16,8 +16,11 @@ export function estimateReceipt(itemSubtotalYen: number, receivedShippingYen: nu
   const missing = entries.filter(([, v]) => v === null).map(([k]) => k);
   const deducted = entries.reduce((sum, [, v]) => sum + (v ?? 0), 0);
   return {
+    grossYen: itemSubtotalYen + receivedShippingYen, // 受け取る総額（費用を引く前）
     amountYen: itemSubtotalYen + receivedShippingYen - deducted,
     missing,
     complete: missing.length === 0,
+    // 費用が1つも入力されていなければ、差し引いた額は「未計算」として金額を出さない
+    noneEntered: missing.length === entries.length,
   };
 }

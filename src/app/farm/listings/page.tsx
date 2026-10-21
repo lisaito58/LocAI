@@ -12,18 +12,19 @@ import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "出品一覧 | LocAI" };
 
-export default function FarmListingsPage() {
+export default function FarmListingsPage({ searchParams }: PageProps<"/farm/listings">) {
   return (
     <Page>
       <PageTitle emoji="🌾" title="出品" lead="出品ごとの在庫と、届いた購入希望の数を確認できます。" />
       <Suspense fallback={<Loading />}>
-        <Content />
+        <Content searchParams={searchParams} />
       </Suspense>
     </Page>
   );
 }
 
-async function Content() {
+async function Content({ searchParams }: Pick<PageProps<"/farm/listings">, "searchParams">) {
+  const tab = (await searchParams).tab === "closed" ? "closed" : "open";
   const { profile } = await requireFarmer();
   if (!profile) {
     return (
@@ -45,6 +46,11 @@ async function Content() {
     },
   });
 
+  const isAccepting = (l: (typeof listings)[number]) => l.status === "PUBLISHED" && l.acceptDeadlineAt > now;
+  const openListings = listings.filter(isAccepting);
+  const closedListings = listings.filter((l) => !isAccepting(l));
+  const shown = tab === "open" ? openListings : closedListings;
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap gap-3">
@@ -56,11 +62,34 @@ async function Content() {
         </Link>
       </div>
       {listings.length === 0 ? (
-        <EmptyState emoji="🌱">まだ出品がありません。「新しく出品」から始めましょう。</EmptyState>
+        <EmptyState emoji="🌱">まだ出品がありません。「野菜を出品する」から始めましょう。</EmptyState>
       ) : (
+        <>
+          <nav aria-label="出品の表示切り替え" className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["open", `🟢 受付中（${openListings.length}）`],
+                ["closed", `⏸ 受付終了・期限切れ（${closedListings.length}）`],
+              ] as const
+            ).map(([key, label]) => (
+              <Link
+                key={key}
+                href={key === "open" ? "/farm/listings" : "/farm/listings?tab=closed"}
+                aria-current={tab === key ? "page" : undefined}
+                className={`flex min-h-11 items-center justify-center rounded-xl border-2 px-3 py-2 text-center font-bold ${
+                  tab === key ? "border-leaf bg-leaf text-white" : "border-green-200 bg-white text-leaf-dark hover:bg-leaf-light"
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          {shown.length === 0 && (
+            <EmptyState emoji="🌱">{tab === "open" ? "いま受付中の出品はありません。" : "受付終了・期限切れの出品はありません。"}</EmptyState>
+          )}
         <div id="soon" className="grid scroll-mt-24 gap-4 sm:grid-cols-2">
-          {listings.map((l) => {
-            const accepting = l.status === "PUBLISHED" && l.acceptDeadlineAt > now;
+          {shown.map((l) => {
+            const accepting = isAccepting(l);
             return (
               <div key={l.id} className="card flex flex-col gap-3">
                 <div className="flex gap-3">
@@ -93,28 +122,29 @@ async function Content() {
                     </p>
                   </div>
                 </div>
-                <StockBar total={l.totalGrams} sold={l.soldGrams} held={l.heldGrams} />
-                <div className="flex flex-wrap items-center gap-2 text-sm">
+                <StockBar total={l.totalGrams} sold={l.soldGrams} held={l.heldGrams} closed={!accepting} />
+                <div className="mt-auto flex flex-wrap items-center gap-2 text-sm">
                   {l._count.orders > 0 && <span className="badge bg-amber-100 text-amber-800">⏳ 回答が必要 {l._count.orders}件</span>}
                   {l.inquiries.length > 0 && <span className="badge bg-sky-100 text-sky-800">💬 相談 {l.inquiries.length}件</span>}
                   <span className="flex-1" />
                   <Link href={`/farm/listings/${l.id}/edit`} className="btn-secondary btn-sm">
-                    ✏️ 編集
+                    ✏️ 価格・送料を編集
                   </Link>
                   <Link href={`/farm/listings/${l.id}/review`} className="btn-secondary btn-sm">
-                    🔎 販売条件を見直す
+                    🧮 受取額を試算
                   </Link>
                   <Link href={`/farm/listings/new?copy=${l.id}`} className="btn-secondary btn-sm">
-                    📋 複製
+                    📋 複製して出品
                   </Link>
                   <Link href={`/farm/listings/${l.id}`} className="btn-primary btn-sm">
-                    管理する →
+                    📦 注文・残量を見る →
                   </Link>
                 </div>
               </div>
             );
           })}
         </div>
+        </>
       )}
     </div>
   );

@@ -52,7 +52,7 @@ const farmers: FarmerSeed[] = [
     profile: {
       farmName: "ひだまりファーム（デモ）",
       prefecture: "大阪府",
-      city: "能勢町",
+      city: "豊能郡能勢町",
       mainItems: "トマト、万願寺唐辛子",
       commitment: "完熟してから収穫します",
       introduction: "大阪の北の山あいで野菜を育てています。（架空の農園です）",

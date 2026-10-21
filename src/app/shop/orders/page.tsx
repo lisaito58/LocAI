@@ -47,7 +47,9 @@ async function Content() {
   const reagree = orders.filter((o) => o.status === "AWAITING_REAGREEMENT");
   const waiting = orders.filter((o) => o.status === "AWAITING_RESPONSE");
   const now = new Date();
-  const payNeeded = confirmed.filter((o) => o.payment?.status === "AWAITING_PAYMENT");
+  const unpaid = confirmed.filter((o) => o.payment?.status === "AWAITING_PAYMENT");
+  const payOverdue = unpaid.filter((o) => o.snapPaymentDeadlineAt < now);
+  const payNeeded = unpaid.filter((o) => o.snapPaymentDeadlineAt >= now);
   const receiveNeeded = confirmed.filter(
     (o) => o.fulfillment && !o.fulfillment.buyerReceivedAt && (o.fulfillment.farmerSentAt || o.snapScheduleStartsAt <= now),
   );
@@ -73,6 +75,20 @@ async function Content() {
               </span>
               <span className="text-sm">👩‍🌾 {o.farmer.farmName}</span>
               <span className="ml-auto text-sm font-bold text-amber-800">⏰ {formatJst(o.deadlineAt)}までに確認</span>
+            </Link>
+          ))}
+        </section>
+      )}
+      {payOverdue.length > 0 && (
+        <section id="payment-overdue" className="flex scroll-mt-24 flex-col gap-3">
+          <h2 className="section-title text-red-800">⚠️ 支払期限を過ぎています（農家さんに連絡してください）</h2>
+          {payOverdue.map((o) => (
+            <Link key={o.id} href={`/orders/${o.id}#messages`} className="card flex flex-wrap items-center gap-2 border-2 border-red-300 p-4">
+              <span className="font-bold">
+                {itemEmoji(o.snapItemName)} {o.snapItemName} {formatYen(o.totalYen)}
+              </span>
+              <span className="text-sm">👩‍🌾 {o.farmer.farmName}</span>
+              <span className="ml-auto text-sm font-bold text-red-800">支払期限 {formatJst(o.snapPaymentDeadlineAt)}（過ぎています）・💬 農家さんに連絡する</span>
             </Link>
           ))}
         </section>

@@ -6,6 +6,7 @@ import { StockBar } from "@/components/stock-bar";
 import { itemEmoji, Loading, Page, PageTitle } from "@/components/ui";
 import { expireDueOrders } from "@/lib/domain/orders";
 import { gramsToKgText } from "@/lib/domain/units";
+import { dbNow } from "@/lib/domain/tx";
 import { requireFarmer } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { DELIVERY_METHOD_LABELS, isServicePrefecture } from "@/lib/validation/listing";
@@ -45,13 +46,14 @@ async function Content({ params }: Pick<PageProps<"/farm/listings/[id]/edit">, "
     },
   });
   if (!listing) notFound();
+  const now = await dbNow(prisma);
   return (
     <div className="flex flex-col gap-6">
       <section className="card flex flex-col gap-3">
         <h2 className="text-xl font-bold">
           {itemEmoji(listing.itemName)} {listing.itemName}
         </h2>
-        <StockBar total={listing.totalGrams} sold={listing.soldGrams} held={listing.heldGrams} />
+        <StockBar total={listing.totalGrams} sold={listing.soldGrams} held={listing.heldGrams} closed={listing.status !== "PUBLISHED" || listing.acceptDeadlineAt <= now} />
         <p className="text-sm">
           品目（食材名）は変更できません。別の野菜や品種を売る場合は、
           <Link href={`/farm/listings/new?copy=${listing.id}`} className="link">

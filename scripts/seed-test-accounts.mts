@@ -53,7 +53,7 @@ const farmers: FarmerSeed[] = [
     profile: {
       farmName: "テストファーム 能勢",
       prefecture: "大阪府",
-      city: "能勢町",
+      city: "豊能郡能勢町",
       mainItems: "トマト、きゅうり",
       commitment: "完熟で収穫（テスト用の自己申告）",
       introduction: "テスト用の架空のファームです。",

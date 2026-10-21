@@ -6,6 +6,7 @@ import { StockBar } from "@/components/stock-bar";
 import { itemEmoji, Loading, Page, PageTitle } from "@/components/ui";
 import { expireDueOrders } from "@/lib/domain/orders";
 import { dateToJstLocal, gramsToKgText } from "@/lib/domain/units";
+import { dbNow } from "@/lib/domain/tx";
 import { requireFarmer } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { PriceReview } from "./price-review";
@@ -34,6 +35,7 @@ async function Content({ params }: Pick<PageProps<"/farm/listings/[id]/review">,
   await expireDueOrders(prisma, { listingIds: [id] });
   const listing = await prisma.listing.findFirst({ where: { id, farmerId: profile.id } });
   if (!listing) notFound();
+  const now = await dbNow(prisma);
   const available = listing.totalGrams - listing.soldGrams - listing.heldGrams;
   // 前回の費用は「呼び出し」として入れるだけ。今回の値かは本人が確認する
   const last = await prisma.costMemo.findFirst({ where: { farmerId: profile.id, kind: "ACTUAL" }, orderBy: { updatedAt: "desc" } });
@@ -45,7 +47,7 @@ async function Content({ params }: Pick<PageProps<"/farm/listings/[id]/review">,
         <h2 className="text-xl font-bold">
           {itemEmoji(listing.itemName)} {listing.itemName}
         </h2>
-        <StockBar total={listing.totalGrams} sold={listing.soldGrams} held={listing.heldGrams} />
+        <StockBar total={listing.totalGrams} sold={listing.soldGrams} held={listing.heldGrams} closed={listing.status !== "PUBLISHED" || listing.acceptDeadlineAt <= now} />
       </section>
       <PriceReview
         listingId={listing.id}
