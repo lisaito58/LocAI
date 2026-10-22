@@ -12,7 +12,8 @@ import { dbNow } from "../src/lib/domain/tx";
 import { prisma } from "../src/lib/prisma";
 
 type Ref = { title: string; source: string; image: string; license: string; author: string };
-const refs: Record<string, Ref> = JSON.parse(readFileSync(new URL("./reference-photos.json", import.meta.url), "utf8"));
+// 1つの品目に複数の写真がある場合は、農家ごとに違う写真になるよう選ぶ（同じ農家なら毎回同じ写真）
+const refs: Record<string, Ref | Ref[]> = JSON.parse(readFileSync(new URL("./reference-photos.json", import.meta.url), "utf8"));
 
 const listings = await prisma.listing.findMany({
   where: {
@@ -38,14 +39,15 @@ const skipped: string[] = [];
 for (const l of listings) {
   if (!l.farmer.user.email.endsWith("@locai.example")) continue;
   if (l.photos.some((p) => p.publishRound === l.publishRound)) continue;
-  const ref = refs[l.itemName];
+  const entry = refs[l.itemName];
+  const ref = Array.isArray(entry) ? entry[[...l.farmer.user.email].reduce((a, ch) => a + ch.charCodeAt(0), 0) % entry.length] : entry;
   if (!ref) {
     skipped.push(l.itemName);
     continue;
   }
-  if (!cache.has(l.itemName)) {
+  if (!cache.has(ref.image)) {
     const raw = await download(ref.image);
-    cache.set(l.itemName, await sharp(raw).rotate().resize(800, 800, { fit: "cover" }).jpeg({ quality: 82 }).toBuffer());
+    cache.set(ref.image, await sharp(raw).rotate().resize(800, 800, { fit: "cover" }).jpeg({ quality: 82 }).toBuffer());
   }
   const id = crypto.randomUUID();
   await prisma.listingPhoto.create({
@@ -59,7 +61,7 @@ for (const l of listings) {
       selfTakenConfirmed: false,
       referenceCredit: `${ref.author} / ${ref.license} / Wikimedia Commons`,
       referenceSourceUrl: ref.source,
-      blob: { create: { contentType: "image/jpeg", data: new Uint8Array(cache.get(l.itemName)!) } },
+      blob: { create: { contentType: "image/jpeg", data: new Uint8Array(cache.get(ref.image)!) } },
     },
   });
   added++;

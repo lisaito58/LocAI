@@ -6,13 +6,36 @@
     "license": "CC0",
     "author": "Fumikas Sagisavas"
   },
-  "万願寺唐辛子": {
-    "title": "File:Manganji green pepper by yomi955.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:Manganji_green_pepper_by_yomi955.jpg",
-    "image": "https://upload.wikimedia.org/wikipedia/commons/9/94/Manganji_green_pepper_by_yomi955.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
-    "license": "CC BY 2.0",
-    "author": "yomi955"
-  },
+  "万願寺唐辛子": [
+    {
+      "title": "File:Manganji green pepper by yomi955.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:Manganji_green_pepper_by_yomi955.jpg",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/9/94/Manganji_green_pepper_by_yomi955.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+      "license": "CC BY 2.0",
+      "author": "yomi955"
+    },
+    {
+      "title": "File:Shishito peppers.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:Shishito_peppers.jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bf/Shishito_peppers.jpg/960px-Shishito_peppers.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "license": "CC BY-SA 4.0",
+      "author": "Eric Polk"
+    },
+    {
+      "title": "File:Kkwari-gochu.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:Kkwari-gochu.jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/Kkwari-gochu.jpg/960px-Kkwari-gochu.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "license": "CC0",
+      "author": "Sotaque"
+    },
+    {
+      "title": "File:Manganji-Togarashi---2024-08-05 006.jpg",
+      "source": "https://commons.wikimedia.org/wiki/File:Manganji-Togarashi---2024-08-05_006.jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/Manganji-Togarashi---2024-08-05_006.jpg/960px-Manganji-Togarashi---2024-08-05_006.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "license": "CC BY 4.0",
+      "author": "RuinDig/Yuki Uchida"
+    }
+  ],
   "伏見甘長とうがらし": {
     "title": "File:Manganji green pepper 01.jpg",
     "source": "https://commons.wikimedia.org/wiki/File:Manganji_green_pepper_01.jpg",
@@ -150,6 +173,83 @@
     "title": "File:Uda-kingobou.jpg",
     "source": "https://commons.wikimedia.org/wiki/File:Uda-kingobou.jpg",
     "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/Uda-kingobou.jpg/960px-Uda-kingobou.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 4.0",
+    "author": "Uo3rt"
+  },
+  "ピーマン": {
+    "title": "File:Green Bell Pepper.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Green_Bell_Pepper.jpg",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2b/Green_Bell_Pepper.jpg/960px-Green_Bell_Pepper.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 4.0",
+    "author": "Gaurav Dhwaj Khadka"
+  },
+  "かぼちゃ": {
+    "title": "File:Cucurbita maxima kabocha USA orange variety.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Cucurbita_maxima_kabocha_USA_orange_variety.jpg",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Cucurbita_maxima_kabocha_USA_orange_variety.jpg/960px-Cucurbita_maxima_kabocha_USA_orange_variety.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY 2.0",
+    "author": "Lizard10979 from USA"
+  },
+  "しょうが": {
+    "title": "File:Ginger rhizomes.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Ginger_rhizomes.jpg",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8a/Ginger_rhizomes.jpg/960px-Ginger_rhizomes.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC0",
+    "author": "Judethedeus"
+  },
+  "ほうれん草": {
+    "title": "File:Bunch of Spinach (16752368240).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Bunch_of_Spinach_(16752368240).jpg",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/Bunch_of_Spinach_%2816752368240%29.jpg/960px-Bunch_of_Spinach_%2816752368240%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 2.0",
+    "author": "Willis Lam"
+  },
+  "長ねぎ": {
+    "title": "File:HK SYP Best of Best Vegetable Peking Welsh onion Allium Aug-2012.JPG",
+    "source": "https://commons.wikimedia.org/wiki/File:HK_SYP_Best_of_Best_Vegetable_Peking_Welsh_onion_Allium_Aug-2012.JPG",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/98/HK_SYP_Best_of_Best_Vegetable_Peking_Welsh_onion_Allium_Aug-2012.JPG/960px-HK_SYP_Best_of_Best_Vegetable_Peking_Welsh_onion_Allium_Aug-2012.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 3.0",
+    "author": "Genmewcaugsa"
+  },
+  "キャベツ": {
+    "title": "File:Brassica oleracea var. capitata (4170722993).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Brassica_oleracea_var._capitata_(4170722993).jpg",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/Brassica_oleracea_var._capitata_%284170722993%29.jpg/960px-Brassica_oleracea_var._capitata_%284170722993%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 2.0",
+    "author": "Dinesh Valke from Thane, India"
+  },
+  "ブロッコリー": {
+    "title": "File:Liat Portal for Foodie Disorder - Fresh Broccoli.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Liat_Portal_for_Foodie_Disorder_-_Fresh_Broccoli.jpg",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2f/Liat_Portal_for_Foodie_Disorder_-_Fresh_Broccoli.jpg/960px-Liat_Portal_for_Foodie_Disorder_-_Fresh_Broccoli.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 4.0",
+    "author": "HaJunkiyada"
+  },
+  "じゃがいも": {
+    "title": "File:Fresh Potatoes.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Fresh_Potatoes.jpg",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/Fresh_Potatoes.jpg/960px-Fresh_Potatoes.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 4.0",
+    "author": "Gaurav Dhwaj Khadka"
+  },
+  "水なす": {
+    "title": "File:Solanum melongena 24 08 2012 (1).JPG",
+    "source": "https://commons.wikimedia.org/wiki/File:Solanum_melongena_24_08_2012_(1).JPG",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/76/Solanum_melongena_24_08_2012_%281%29.JPG/960px-Solanum_melongena_24_08_2012_%281%29.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY-SA 3.0",
+    "author": "Joydeep"
+  },
+  "レタス": {
+    "title": "File:Lettuce Mini Heads \"Australe\" (7331118944).jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Lettuce_Mini_Heads_%22Australe%22_(7331118944).jpg",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Lettuce_Mini_Heads_%22Australe%22_%287331118944%29.jpg/960px-Lettuce_Mini_Heads_%22Australe%22_%287331118944%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "license": "CC BY 2.0",
+    "author": "Dwight Sipler from Stow, MA, USA"
+  },
+  "れんこん": {
+    "title": "File:Tsutsui-renkon.JPG",
+    "source": "https://commons.wikimedia.org/wiki/File:Tsutsui-renkon.JPG",
+    "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/Tsutsui-renkon.JPG/960px-Tsutsui-renkon.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
     "license": "CC BY-SA 4.0",
     "author": "Uo3rt"
   }
