@@ -17,6 +17,7 @@ export type FarmerSeed = {
     introduction: string;
     responseGuide: string;
     availableWeekdays: string;
+    trialDailyLimit?: number;
   };
   listings: {
     itemName: string;
@@ -34,6 +35,8 @@ export type FarmerSeed = {
     acceptHours?: number; // 受付期限：いまから何時間後か（省略時は4日後）
     responseHours?: number; // 回答の最終期限：いまから何時間後か（省略時は受付期限の24時間後）
     trial?: { setKg: number; priceYen: number; count: number }; // お試し販売（任意）
+    feeYen?: [number, number, number, number]; // 送料（2kg以下／5kg以下／10kg以下／30kg以下）。省略時は800/1000/1300/1800円
+    ratePrefectures?: string[]; // 送料を登録する府県。省略時は大阪府・京都府
   }[];
 };
 
@@ -47,11 +50,11 @@ export type RestaurantSeed = {
 };
 
 // 送料表は大阪府・京都府だけ登録する（兵庫県などは「送料未設定」になる）
-const SHIPPING_BANDS = (pref: string) => [
-  { prefecture: pref, minGramsExclusive: 0, maxGramsInclusive: 2000, feeYen: 800 },
-  { prefecture: pref, minGramsExclusive: 2000, maxGramsInclusive: 5000, feeYen: 1000 },
-  { prefecture: pref, minGramsExclusive: 5000, maxGramsInclusive: 10000, feeYen: 1300 },
-  { prefecture: pref, minGramsExclusive: 10000, maxGramsInclusive: 30000, feeYen: 1800 },
+const SHIPPING_BANDS = (pref: string, fee: [number, number, number, number] = [800, 1000, 1300, 1800]) => [
+  { prefecture: pref, minGramsExclusive: 0, maxGramsInclusive: 2000, feeYen: fee[0] },
+  { prefecture: pref, minGramsExclusive: 2000, maxGramsInclusive: 5000, feeYen: fee[1] },
+  { prefecture: pref, minGramsExclusive: 5000, maxGramsInclusive: 10000, feeYen: fee[2] },
+  { prefecture: pref, minGramsExclusive: 10000, maxGramsInclusive: 30000, feeYen: fee[3] },
 ];
 
 export async function seedAccounts(opts: {
@@ -150,7 +153,7 @@ export async function createSeedListing(farmerId: string, l: ListingSeed, dataLa
       paymentMethod: l.onHandoverShipping ? "CASH" : "BANK_TRANSFER",
       prepayDeadlineAt: l.onHandoverShipping ? null : h(responseH + 6),
       paymentConfirmGuideHours: 24,
-      shippingRates: { create: [...SHIPPING_BANDS("大阪府"), ...SHIPPING_BANDS("京都府")] },
+      shippingRates: { create: (l.ratePrefectures ?? ["大阪府", "京都府"]).flatMap((p) => SHIPPING_BANDS(p, l.feeYen)) },
     },
   });
   await prisma.scheduleSlot.createMany({
@@ -165,7 +168,7 @@ export async function createSeedListing(farmerId: string, l: ListingSeed, dataLa
         paymentMethod: "CASH",
         paymentConfirmGuideHours: 24,
         shippingRates: {
-          create: ["大阪府", "京都府"].map((p) => ({ prefecture: p, minGramsExclusive: 0, maxGramsInclusive: 1_000_000, feeYen: 0 })),
+          create: (l.ratePrefectures ?? ["大阪府", "京都府"]).map((p) => ({ prefecture: p, minGramsExclusive: 0, maxGramsInclusive: 1_000_000, feeYen: 0 })),
         },
       },
     });
