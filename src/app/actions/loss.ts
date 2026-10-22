@@ -4,11 +4,12 @@ import { refresh } from "next/cache";
 import type { ActionResult } from "@/components/action-button";
 import { saveLossRecord, type LossChoice } from "@/lib/domain/loss";
 import { formatKg } from "@/lib/domain/units";
-import { allowAction, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
+import { allowAction, INVALID_REQUEST_MESSAGE, isValidId, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 
 export async function saveLossAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("RESTAURANT");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "loss", 30, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const raw = String(formData.get("choice") ?? "");
   let choice: LossChoice;
