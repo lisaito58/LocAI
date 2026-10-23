@@ -29,6 +29,8 @@ import { DELIVERY_METHOD_LABELS, PAYMENT_METHOD_LABELS, PAYMENT_TIMING_LABELS } 
 import { searchHref } from "@/lib/validation/search";
 import { LossNotice } from "./loss-notice";
 import { OrderForm } from "./order-form";
+import { QuoteForm } from "./quote-form";
+import { StepFocus } from "./step-focus";
 
 export const metadata: Metadata = { title: "出品の詳細 | LocAI" };
 
@@ -137,6 +139,18 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
     });
   }
 
+  // 「合計と期限を確認する」を押したのに計算に必要な値が読めないときは、理由を表示する（何も出ずに止まらないように）
+  const inputErrors = q.choice
+    ? [
+        grams === null && "購入する量を、kgの数字（小数3桁まで）で入力してください。",
+        !budget && "送料込み予算を入力してください。",
+        !use && "使用日を入力してください。",
+        !byDate && "仕入れ確定希望時刻を入力してください。",
+      ].filter((m): m is string => Boolean(m))
+    : [];
+  // 手順を進めたあとに表示位置を合わせる先（ボタンを押した直後の1回だけ）
+  const stepTarget = quote?.ok ? "order-step-quote" : quote || inputErrors.length ? "order-step-error" : useEnd ? "order-step-slots" : null;
+
   // 前回のロス記録による注文前の案内（記録がなければ出さない）
   const lossWarning = quote?.ok ? await getLossWarning(prisma, profile.id, listing.itemName) : null;
 
@@ -149,6 +163,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
   // 申込フォーム（前回のロス記録による案内がある場合は、その後に表示する）
   const orderForm = quote?.ok ? (
     <OrderForm
+      key={`${optionId}:${slotId}:${purchaseKg}:${budget}:${use}:${by}:${isTrial}:${quote.quote.totalYen}`}
       deadlineText={formatJst(quote.quote.deadlineAt)}
       hidden={{
         listingId: listing.id,
@@ -312,7 +327,8 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
                 </p>
               </div>
             )}
-            <form className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2" action={`/shop/listings/${listing.id}#order`}>
+            {stepTarget && <StepFocus key={JSON.stringify(q)} targetId={stepTarget} />}
+            <QuoteForm action={`/shop/listings/${listing.id}`} submitLabel={useEnd ? "🧮 合計と期限を確認する" : "📅 受け取れる日程を表示する"}>
               {Object.entries(q)
                 .filter(([k]) => !["purchaseKg", "purchase", "budget", "use", "by", "choice", "early", "kind"].includes(k))
                 .map(([k, v]) => (
@@ -356,6 +372,10 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
                     使用日を入れて下のボタンを押すと、使用日までに受け取れる日程が選べるようになります。
                   </p>
                 ) : (
+                  <>
+                  <h3 id="order-step-slots" tabIndex={-1} className="scroll-mt-24 font-bold text-leaf-dark outline-none focus-visible:ring-2 focus-visible:ring-leaf">
+                    📅 受け取り方法と日程を選んでください
+                  </h3>
                   <Labeled label="📅 受け取り方法と日程">
                     <select name="choice" className="input" defaultValue={q.choice ?? ""} required>
                       <option value="" disabled>
@@ -381,6 +401,7 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
                       )}
                     </select>
                   </Labeled>
+                  </>
                 )}
                 {useEnd && nearChoices.length === 0 && (
                   <p className="text-sm">使用日の3日前〜当日に受け取れる日程はありません。</p>
@@ -398,15 +419,25 @@ async function Content({ params, searchParams }: Pick<PageProps<"/shop/listings/
                   日程は農家さんが登録した「お店が受け取る予定の日時」です（宅配の場合も発送日ではありません）。届く時間は前後することがあるので、使う時間に間に合うかは相談欄で確認できます。3日前〜当日は目安で、保存できる期間や鮮度を保証するものではありません。
                 </p>
               </div>
-              <div className="sm:col-span-2">
-                <button className="btn-secondary w-full">{useEnd ? "🧮 合計と期限を確認する" : "📅 受け取れる日程を表示する"}</button>
-              </div>
-            </form>
+            </QuoteForm>
 
-            {quote && !quote.ok && <Notice tone="error">⚠️ {quote.error}</Notice>}
+            {(inputErrors.length > 0 || (quote && !quote.ok)) && (
+              <div id="order-step-error" tabIndex={-1} role="alert" className="scroll-mt-24 outline-none">
+                <Notice tone="error">
+                  <p className="font-bold">入力内容を確認してください（入力した内容はそのまま残っています）</p>
+                  {inputErrors.map((m) => (
+                    <p key={m}>⚠️ {m}</p>
+                  ))}
+                  {quote && !quote.ok && <p>⚠️ {quote.error}</p>}
+                </Notice>
+              </div>
+            )}
             {quote?.ok && (
               <div className="flex flex-col gap-3">
                 <div className="rounded-3xl border-2 border-leaf bg-leaf-light/40 p-4">
+                  <h3 id="order-step-quote" tabIndex={-1} className="mb-3 scroll-mt-24 font-bold text-leaf-dark outline-none focus-visible:ring-2 focus-visible:ring-leaf">
+                    ✅ 合計と期限を確認してください
+                  </h3>
                   <div className="grid gap-2 text-sm min-[400px]:grid-cols-2 sm:grid-cols-4">
                     <Info label={isTrial ? "数量（お試しセット）" : "数量"} value={formatKg(quote.quote.quantityGrams)} />
                     <Info label="商品代" value={formatYen(quote.quote.itemSubtotalYen)} />
