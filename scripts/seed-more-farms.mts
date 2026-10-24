@@ -1,16 +1,16 @@
 // デモ・動作確認用：関西各地のテスト農家（test-farmer6〜14）を追加し、出品を増やす
 // 実行：npm run seed:farms → 写真を付けるには続けて npm run seed:photos
 // - すべて架空の農園・自己申告の内容（実在の農家・商品ではありません）
-// - アカウントがなければ作り、プロフィールは毎回この内容に更新する（住所・電話番号・パスワードは架空のまま変えない）
+// - アカウントがなければ作り、プロフィールは毎回この内容に更新する（住所・電話番号は架空のまま変えない）。パスワードは環境変数 DEMO_PASSWORD（必須。未設定なら DB に触れる前に止まる）
 // - 出品は実行するたびに追加する（既存の出品・注文は変更しない）。説明に「テストデータ」と入れて区別する
 // - 万願寺唐辛子は産地・価格・大きさ・送料が違う出品を複数用意し、比べて選べるようにする
 //   （受付期限4日後・回答の最終期限5日後・受け渡し6／7／9日後の標準の期限。デモ台本の入力値で申し込める）
-import "./load-env";
+import { requireDemoPassword } from "./load-env";
 import { dbNow } from "../src/lib/domain/tx";
 import { prisma } from "../src/lib/prisma";
 import { createSeedListing, seedAccounts, type FarmerSeed } from "./seed-lib";
 
-const PASSWORD = process.env.TEST_PASSWORD || "locai-test-2026";
+const PASSWORD = requireDemoPassword();
 const H = (days: number, hours = 0) => days * 24 + hours;
 const NEAR: [number, number, number, number] = [600, 800, 1000, 1400]; // 大阪に近い産地
 const FAR: [number, number, number, number] = [900, 1100, 1400, 1900]; // 遠めの産地

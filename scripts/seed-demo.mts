@@ -1,10 +1,10 @@
 // デモデータの投入（すべて架空の人物・店・農園）
 // 実行：npm run seed:demo
-// すでに同じメールのデモアカウントがあれば作り直さない。パスワードは DEMO_PASSWORD（未設定なら下の初期値）。
-import "./load-env";
+// すでに同じメールのデモアカウントがあれば作り直さない。パスワードは環境変数 DEMO_PASSWORD（必須。未設定なら DB に触れる前に止まる）。
+import { requireDemoPassword } from "./load-env";
 import { seedAccounts, type FarmerSeed, type RestaurantSeed } from "./seed-lib";
 
-const PASSWORD = process.env.DEMO_PASSWORD || "locai-demo-2026";
+const PASSWORD = requireDemoPassword();
 
 const farmers: FarmerSeed[] = [
   {
@@ -72,5 +72,5 @@ const restaurants: RestaurantSeed[] = [
 ];
 
 const { listingCount } = await seedAccounts({ password: PASSWORD, dataLabel: "デモデータ", farmers, restaurants });
-console.log(`\n完了：出品 ${listingCount} 件を作成しました。デモアカウントのパスワードは DEMO_PASSWORD（未設定なら初期値）です。`);
+console.log(`\n完了：出品 ${listingCount} 件を作成しました。デモアカウントのパスワードは DEMO_PASSWORD に設定した値です。`);
 process.exit(0);

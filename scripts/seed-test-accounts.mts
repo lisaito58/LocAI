@@ -1,11 +1,11 @@
 // 動作確認用のテストアカウントの投入（すべて架空の人物・店・農園）
 // 実行：npm run seed:test
-// すでに同じメールのアカウントがあれば作り直さない。パスワードは TEST_PASSWORD（未設定なら下の初期値）。
+// すでに同じメールのアカウントがあれば作り直さない。パスワードは環境変数 DEMO_PASSWORD（必須。デモ用と同じ値。未設定なら DB に触れる前に止まる）。
 // 出品の受付期限は投入した時点から4日後。期限が過ぎたら、農家アカウントで「残りを再公開」するか新しく出品する。
-import "./load-env";
+import { requireDemoPassword } from "./load-env";
 import { seedAccounts, type FarmerSeed, type RestaurantSeed } from "./seed-lib";
 
-const PASSWORD = process.env.TEST_PASSWORD || "locai-test-2026";
+const PASSWORD = requireDemoPassword();
 
 const farmers: FarmerSeed[] = [
   {
@@ -114,5 +114,5 @@ const restaurants: RestaurantSeed[] = [
 ];
 
 const { listingCount } = await seedAccounts({ password: PASSWORD, dataLabel: "テストデータ", farmers, restaurants });
-console.log(`\n完了：出品 ${listingCount} 件を作成しました。テストアカウントのパスワードは TEST_PASSWORD（未設定なら初期値）です。`);
+console.log(`\n完了：出品 ${listingCount} 件を作成しました。テストアカウントのパスワードは DEMO_PASSWORD に設定した値です。`);
 process.exit(0);
