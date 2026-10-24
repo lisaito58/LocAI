@@ -3,11 +3,12 @@
 import { refresh } from "next/cache";
 import type { ActionResult } from "@/components/action-button";
 import { postReview, replyToReview, reportReview } from "@/lib/domain/reviews";
-import { allowAction, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
+import { allowAction, INVALID_REQUEST_MESSAGE, isValidId, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 
 export async function postReviewAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("RESTAURANT");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "review", 10, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const rating = String(formData.get("rating") ?? "");
   if (rating !== "GOOD" && rating !== "CONCERN") return { ok: false, error: "「よかった」か「気になる点があった」を選んでください" };
@@ -24,6 +25,7 @@ export async function postReviewAction(orderId: string, _prev: ActionResult, for
 
 export async function replyReviewAction(reviewId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(reviewId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "review", 10, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const r = await replyToReview(prisma, { reviewId, userId: user.id, body: String(formData.get("body") ?? "") });
   refresh();
@@ -32,6 +34,7 @@ export async function replyReviewAction(reviewId: string, _prev: ActionResult, f
 
 export async function reportReviewAction(reviewId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
+  if (!isValidId(reviewId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "review-report", 5, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const r = await reportReview(prisma, { reviewId, userId: user.id, reason: String(formData.get("reason") ?? "") });
   if (!r.ok) return r;

@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import type { ActionResult } from "@/components/action-button";
 import { kgTextToGrams } from "@/lib/domain/units";
-import { requireFarmer } from "@/lib/guard";
+import { allowAction, INVALID_REQUEST_MESSAGE, isValidId, RATE_LIMIT_MESSAGE, requireFarmer } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { blankToUndefined } from "@/lib/validation/listing";
 
@@ -22,7 +22,9 @@ const costSchema = z.object({
 });
 
 export async function saveOrderCostAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
-  const { profile } = await requireFarmer();
+  const { user, profile } = await requireFarmer();
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
+  if (!(await allowAction(user.id, "cost-write", 30, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   if (!profile) return { ok: false, error: "農園情報を登録してください" };
   const order = await prisma.order.findFirst({ where: { id: orderId, farmerId: profile.id } });
   if (!order) return { ok: false, error: "注文が見つかりません" };
@@ -56,7 +58,8 @@ const simSchema = z.object({
 
 // 値下げ検討などの試算（実績とは区別して保存する）
 export async function saveSimulationAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
-  const { profile } = await requireFarmer();
+  const { user, profile } = await requireFarmer();
+  if (!(await allowAction(user.id, "cost-write", 30, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   if (!profile) return { ok: false, error: "農園情報を登録してください" };
   const parsed = simSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };

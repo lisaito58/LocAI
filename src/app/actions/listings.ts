@@ -7,7 +7,7 @@ import type { ActionResult } from "@/components/action-button";
 import { approveAllPlain } from "@/lib/domain/orders";
 import { closeListing, createListing, republishListing, updateListing, updateShippingRates, updateTrialSettings, type PhotoUpload } from "@/lib/domain/listings";
 import { kgTextToGrams } from "@/lib/domain/units";
-import { allowAction, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
+import { allowAction, INVALID_REQUEST_MESSAGE, isValidId, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { detectImageType, listingEditSchema, listingSchema, MAX_PHOTO_BYTES } from "@/lib/validation/listing";
 
@@ -64,6 +64,8 @@ export async function submitListing(_prev: ListingFormState, formData: FormData)
 
 export async function editListing(listingId: string, _prev: ListingFormState, formData: FormData): Promise<ListingFormState> {
   const user = await requireUser("FARMER");
+  if (!isValidId(listingId)) return { error: INVALID_REQUEST_MESSAGE };
+  if (!(await allowAction(user.id, "listing-write", 20, 60))) return { error: RATE_LIMIT_MESSAGE };
   const parsed = listingEditSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
   const before = await prisma.listing.findFirst({ where: { id: listingId, farmer: { userId: user.id } } });
@@ -100,6 +102,7 @@ export async function editListing(listingId: string, _prev: ListingFormState, fo
 // 送料表の保存（受け渡し方法ごと）。行は「地域・下限kg・上限kg・送料」
 export async function saveShippingRatesAction(listingId: string, deliveryOptionId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(listingId, deliveryOptionId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "listing-write", 20, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   let rows: { prefecture: string; minKg: string; maxKg: string; feeYen: string }[];
   try {
@@ -123,6 +126,8 @@ export async function saveShippingRatesAction(listingId: string, deliveryOptionI
 
 export async function closeListingAction(listingId: string): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(listingId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
+  if (!(await allowAction(user.id, "listing-write", 20, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const r = await closeListing(prisma, { farmerUserId: user.id, listingId });
   refresh();
   return r.ok ? { ok: true, message: "新しい申込の受付を終了しました" } : r;
@@ -130,6 +135,7 @@ export async function closeListingAction(listingId: string): Promise<ActionResul
 
 export async function approveAllAction(listingId: string): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(listingId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "order-write", 30, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const results = await approveAllPlain(prisma, { listingId, farmerUserId: user.id });
   refresh();
@@ -153,6 +159,7 @@ const reviewSchema = z.object({
 
 export async function reviewSalesTermsAction(listingId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(listingId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "listing-write", 10, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const parsed = reviewSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
@@ -176,6 +183,8 @@ export async function reviewSalesTermsAction(listingId: string, _prev: ActionRes
 // お試し販売の設定の保存
 export async function saveTrialSettingsAction(listingId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(listingId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
+  if (!(await allowAction(user.id, "listing-write", 20, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const enabled = formData.get("trialEnabled") === "on";
   const setGrams = kgTextToGrams(String(formData.get("trialSetKg") ?? ""));
   const priceText = String(formData.get("trialPriceYen") ?? "").trim();

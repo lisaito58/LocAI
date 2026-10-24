@@ -10,6 +10,7 @@ import type { FormState } from "@/lib/validation/auth";
 
 export async function saveRestaurantProfile(_prev: FormState, formData: FormData): Promise<FormState> {
   const user = await requireUser("RESTAURANT");
+  if (!(await allowAction(user.id, "profile-write", 20, 60))) return { message: RATE_LIMIT_MESSAGE };
   const parsed = restaurantProfileSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: z.flattenError(parsed.error).fieldErrors };
   await prisma.restaurantProfile.upsert({
@@ -23,6 +24,7 @@ export async function saveRestaurantProfile(_prev: FormState, formData: FormData
 
 export async function saveFarmerProfile(_prev: FormState, formData: FormData): Promise<FormState> {
   const user = await requireUser("FARMER");
+  if (!(await allowAction(user.id, "profile-write", 20, 60))) return { message: RATE_LIMIT_MESSAGE };
   const parsed = farmerProfileSchema.safeParse({
     ...Object.fromEntries(formData),
     availableWeekdays: formData.getAll("availableWeekdays"),

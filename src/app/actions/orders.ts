@@ -27,7 +27,7 @@ import {
 } from "@/lib/domain/records";
 import type { Result } from "@/lib/domain/tx";
 import { jstLocalToDate, kgTextToGrams } from "@/lib/domain/units";
-import { allowAction, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
+import { allowAction, INVALID_REQUEST_MESSAGE, isValidId, RATE_LIMIT_MESSAGE, requireUser } from "@/lib/guard";
 import { prisma } from "@/lib/prisma";
 import { blankToUndefined } from "@/lib/validation/listing";
 
@@ -94,6 +94,7 @@ export async function submitOrder(_prev: OrderFormState, formData: FormData): Pr
 
 export async function approveAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const r = await approveOrder(prisma, {
     orderId,
@@ -105,12 +106,14 @@ export async function approveAction(orderId: string, _prev: ActionResult, formDa
 
 export async function declineAction(orderId: string): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await declineOrder(prisma, { orderId, farmerUserId: user.id }), "見送りました");
 }
 
 export async function proposeChangeAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const grams = kgTextToGrams(String(formData.get("quantityKg") ?? ""));
   if (grams === null) return { ok: false, error: "数量はkgで、小数3桁までの数字で入力してください" };
@@ -132,12 +135,14 @@ export async function proposeChangeAction(orderId: string, _prev: ActionResult, 
 
 export async function cancelAction(orderId: string): Promise<ActionResult> {
   const user = await requireUser("RESTAURANT");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await cancelOrder(prisma, { orderId, restaurantUserId: user.id }), "取り消しました");
 }
 
 export async function reagreeAction(orderId: string): Promise<ActionResult> {
   const user = await requireUser("RESTAURANT");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await reagreeOrder(prisma, { orderId, restaurantUserId: user.id }), "再同意し、販売確定しました");
 }
@@ -146,18 +151,21 @@ export async function reagreeAction(orderId: string): Promise<ActionResult> {
 
 export async function reportPaymentAction(orderId: string): Promise<ActionResult> {
   const user = await requireUser("RESTAURANT");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await reportPayment(prisma, { orderId, userId: user.id }), "支払ったことを申告しました");
 }
 
 export async function confirmPaymentAction(orderId: string): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await confirmPayment(prisma, { orderId, userId: user.id }), "入金確認を記録しました");
 }
 
 export async function markSentAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("FARMER");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const r = await markSent(prisma, { orderId, userId: user.id, acknowledgeUnpaid: formData.get("acknowledgeUnpaid") === "on" });
   return done(r, "発送・引き渡しを記録しました");
@@ -165,6 +173,7 @@ export async function markSentAction(orderId: string, _prev: ActionResult, formD
 
 export async function markReceivedAction(orderId: string): Promise<ActionResult> {
   const user = await requireUser("RESTAURANT");
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await markReceived(prisma, { orderId, userId: user.id }), "受け取りを記録しました");
 }
@@ -173,6 +182,7 @@ const TARGETS = ["paymentReport", "paymentConfirm", "sent", "received"] as const
 
 export async function correctRecordAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const target = String(formData.get("target"));
   if (!TARGETS.includes(target as CorrectionTarget)) return { ok: false, error: "訂正する記録を選んでください" };
@@ -187,6 +197,8 @@ export async function correctRecordAction(orderId: string, _prev: ActionResult, 
 
 export async function needsDiscussionAction(orderId: string, value: boolean): Promise<ActionResult> {
   const user = await requireUser();
+  if (!isValidId(orderId) || typeof value !== "boolean") return { ok: false, error: INVALID_REQUEST_MESSAGE };
+  if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await setNeedsDiscussion(prisma, { orderId, userId: user.id, value }));
 }
 
@@ -194,23 +206,28 @@ export async function needsDiscussionAction(orderId: string, value: boolean): Pr
 
 export async function postOrderMessageAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
+  if (!isValidId(orderId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "message", 20, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await postOrderMessage(prisma, { orderId, userId: user.id, body: String(formData.get("body") ?? "") }));
 }
 
 export async function postInquiryMessageAction(inquiryId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
+  if (!isValidId(inquiryId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "message", 20, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await postInquiryMessage(prisma, { inquiryId, userId: user.id, body: String(formData.get("body") ?? "") }));
 }
 
 export async function closeInquiryAction(inquiryId: string): Promise<ActionResult> {
   const user = await requireUser();
+  if (!isValidId(inquiryId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
+  if (await limited(user.id)) return { ok: false, error: RATE_LIMIT_MESSAGE };
   return done(await closeInquiry(prisma, { inquiryId, userId: user.id }), "相談を終了しました");
 }
 
 export async function openInquiryAction(listingId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser("RESTAURANT");
+  if (!isValidId(listingId)) return { ok: false, error: INVALID_REQUEST_MESSAGE };
   if (!(await allowAction(user.id, "message", 20, 60))) return { ok: false, error: RATE_LIMIT_MESSAGE };
   const r = await openInquiry(prisma, {
     listingId,

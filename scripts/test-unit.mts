@@ -206,3 +206,21 @@ test("地図の位置：郡名なし・区なしの政令市の登録でも、�
   assert.equal(cityPoint("京都府", "ああああ"), null, "一覧にない名前は出さない");
   assert.equal(cityPoint("京都府", "京都"), null);
 });
+
+test("サーバー操作に渡されるIDの確認：正常なIDは通り、改ざんされた値は拒否する", async () => {
+  const { isValidId } = await import("../src/lib/validation/id");
+  // 正常：このアプリで使っている cuid と UUID
+  assert.ok(isValidId("cmvjgk2m300006cpkyeknilqd"));
+  assert.ok(isValidId("3f1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"));
+  assert.ok(isValidId("cmvf1mttv001lgqpkmyxi1k96", "cmvh3c1au003rfwpk08e37nxw"), "複数のIDもまとめて確認できる");
+  // 不正：文字列でない・空・長すぎる・記号を含む
+  assert.equal(isValidId(123), false);
+  assert.equal(isValidId({ id: "x" }), false);
+  assert.equal(isValidId(["a"]), false);
+  assert.equal(isValidId(null), false);
+  assert.equal(isValidId(""), false);
+  assert.equal(isValidId("a".repeat(65)), false);
+  assert.equal(isValidId("../etc/passwd"), false);
+  assert.equal(isValidId("abc' OR 1=1"), false);
+  assert.equal(isValidId("cmvf1mttv001lgqpkmyxi1k96", 5), false, "1つでも不正なら拒否");
+});
